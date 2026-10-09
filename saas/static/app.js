@@ -8,9 +8,10 @@
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const el = (t, c, h) => { const n = document.createElement(t); if (c) n.className = c; if (h != null) n.innerHTML = h; return n; };
-  const nf = new Intl.NumberFormat("en-US");
+  const nf = new Intl.NumberFormat("fr-FR");
+  const cn = (n) => (n >= 1e6 ? (n / 1e6).toLocaleString("fr-FR", { maximumFractionDigits: 1 }) + " M" : n >= 1e3 ? (n / 1e3).toLocaleString("fr-FR", { maximumFractionDigits: 1 }) + " K" : String(n));
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const ago = (ts) => { if (!ts) return "never"; const d = Date.now() / 1000 - ts; if (d < 60) return "just now"; if (d < 3600) return `${Math.floor(d / 60)}m ago`; if (d < 86400) return `${Math.floor(d / 3600)}h ago`; return `${Math.floor(d / 86400)}d ago`; };
+  const ago = (ts) => { if (!ts) return "jamais"; const d = Date.now() / 1000 - ts; if (d < 60) return "à l'instant"; if (d < 3600) return `il y a ${Math.floor(d / 60)} min`; if (d < 86400) return `il y a ${Math.floor(d / 3600)} h`; return `il y a ${Math.floor(d / 86400)} j`; };
 
   const LS = { token: "graphify.token", ws: "graphify.ws", theme: "graphify.theme" };
   const S = { theme: null, pal: null, stats: null, comms: [], view: "overview", ide: "vscode", me: null, ws: null, authMode: "login" };
@@ -28,7 +29,7 @@
       // channel guaranteed to arrive. Server reads it only under /api/*.
       u.searchParams.set("token", token);
     }
-    if (S.ws) headers["X-Workspace"] = S.ws;
+    if (opts.ws) headers["X-Workspace"] = opts.ws; else if (S.ws) headers["X-Workspace"] = S.ws;
     if (opts.body !== undefined) headers["Content-Type"] = "application/json";
     const r = await fetch(u, { method: opts.method || "GET", headers, body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined });
     let data = null;
@@ -106,15 +107,15 @@
   let lastStats = null;
   async function loadOverview() {
     const st = S.stats; lastStats = st;
-    $("#proj-meta").textContent = st.nodes != null ? `· ${nf.format(st.nodes)} nodes / ${nf.format(st.edges)} edges` : "";
+    $("#proj-meta").textContent = st.nodes != null ? `· ${nf.format(st.nodes)} nœuds / ${nf.format(st.edges)} arêtes` : "";
     $("#k-comm").textContent = st.communities != null ? nf.format(st.communities) : "";
-    $("#nav-foot").innerHTML = `<b>${esc((S.me && S.me.email) || "")}</b><br>${nf.format(st.nodes || 0)} nodes · ${nf.format(st.edges || 0)} edges<br>${nf.format(st.files || 0)} files · ${st.communities || 0} communities${st.built_at_commit ? `<br>commit <code>${esc(String(st.built_at_commit).slice(0, 7))}</code>` : ""}`;
+    $("#nav-foot").innerHTML = `<b>${esc((S.me && S.me.email) || "")}</b><br>${nf.format(st.nodes || 0)} nœuds · ${nf.format(st.edges || 0)} arêtes<br>${nf.format(st.files || 0)} fichiers · ${st.communities || 0} communautés${st.built_at_commit ? `<br>commit <code>${esc(String(st.built_at_commit).slice(0, 7))}</code>` : ""}`;
 
     const cards = [
-      ["Nodes", st.nodes, `${nf.format(st.files || 0)} source files`],
-      ["Edges", st.edges, `avg degree ${st.avg_degree ?? "–"}`],
-      ["Communities", st.communities, "Leiden clustering"],
-      ["Local extraction", "0", "LLM credits spent"],
+      ["Nœuds", st.nodes, `${nf.format(st.files || 0)} fichiers sources`],
+      ["Arêtes", st.edges, `degré moyen ${st.avg_degree ?? "–"}`],
+      ["Communautés", st.communities, "clustering de Leiden"],
+      ["Extraction locale", "0", "crédits LLM dépensés"],
     ];
     $("#ov-stats").innerHTML = cards.map(([l, v, h]) =>
       `<div class="card stat"><div class="v">${typeof v === "number" ? nf.format(v) : (v ?? "–")}</div><div class="l">${l}</div><div class="h">${esc(h)}</div></div>`).join("");
@@ -124,6 +125,135 @@
     const gods = (await api("/api/god-nodes", { limit: 12 })).nodes;
     $("#ov-gods").innerHTML = gods.map(godRow).join("");
     bindItems($("#ov-gods"));
+    loadDashboard().catch(() => {});
+  }
+
+  // ---------------------------------------------------- dashboard (aperçu)
+  const hash01 = (s) => {
+    let h = 2166136261;
+    for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); }
+    return (h >>> 0) / 4294967295;
+  };
+
+  function drawThumb(cv, r) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = cv.clientWidth || 250, h = cv.clientHeight || 118;
+    cv.width = w * dpr; cv.height = h * dpr;
+    const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const cs = getComputedStyle(document.documentElement);
+    const nodes = r.nodes.map((n) => {
+      const a = hash01(n.id) * Math.PI * 2, b = hash01(n.id + "#b") * Math.PI * 2;
+      const rr = 10 + hash01(n.id + "#r") * (Math.min(w, h) / 2 - 14);
+      return { ...n, x: w / 2 + Math.cos(a) * rr * (w / h) * 0.85, y: h / 2 + Math.sin(b) * rr * 0.85 };
+    });
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    ctx.strokeStyle = cs.getPropertyValue("--border").trim(); ctx.globalAlpha = .45; ctx.lineWidth = .7;
+    r.links.forEach((l) => {
+      const a = byId.get(l.source), b = byId.get(l.target); if (!a || !b) return;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    });
+    ctx.fillStyle = cs.getPropertyValue("--text").trim();
+    nodes.forEach((n) => {
+      ctx.globalAlpha = .3 + Math.min(.65, (n.degree || 1) / 80);
+      ctx.beginPath(); ctx.arc(n.x, n.y, 1 + Math.min(2.2, (n.degree || 1) / 45), 0, 6.2832); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  function paintCols(sel, axisSel, daily, key) {
+    const max = Math.max(...daily.map((d) => d[key]), 1);
+    $(sel).innerHTML = daily.map((d) =>
+      `<div class="col ${d[key] ? "" : "zero"}" style="height:${Math.max(3, (d[key] / max) * 100)}%" title="${d.day} · ${d[key]}"></div>`).join("");
+    const lbl = (day) => new Date(day + "T00:00:00Z").toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" });
+    const f = daily[0], m = daily[Math.floor(daily.length / 2)], l = daily[daily.length - 1];
+    $(axisSel).innerHTML = `<span>${lbl(f.day)}</span><span>${lbl(m.day)}</span><span>${lbl(l.day)}</span>`;
+  }
+
+  async function loadDashboard() {
+    const wl = await api("/api/workspaces");
+    const wss = wl.workspaces; S.workspaces = wss;
+    $("#dv-count").textContent = wss.length;
+
+    const row = $("#dv-repos");
+    row.innerHTML = wss.map((w) => `<div class="repo-card ${w.id === S.ws ? "active" : ""}" data-ws="${esc(w.id)}">
+        <div class="thumb"><canvas></canvas><span class="badge ok">✓ Indexé</span></div>
+        <div class="rc-body"><div class="rc-name">${esc(w.name)}</div>
+        <div class="rc-meta">${w.nodes != null ? `${cn(w.nodes)} nœuds · ${cn(w.edges || 0)} arêtes` : "graphe manquant"} · plan ${esc(w.plan || "free")}</div></div>
+      </div>`).join("") || `<p class="empty">Aucun workspace indexé pour l'instant.</p>`;
+    $$(".repo-card", row).forEach((c) => {
+      c.onclick = async () => {
+        if (c.dataset.ws === S.ws) return;
+        S.ws = c.dataset.ws; GStore.set(LS.ws, S.ws); await enter();
+      };
+    });
+    await Promise.all($$(".repo-card", row).map(async (c) => {
+      try {
+        const r = await api("/api/graph", { mode: "top", limit: 110 }, { ws: c.dataset.ws });
+        drawThumb(c.querySelector("canvas"), r);
+      } catch {}
+    }));
+
+    try {
+      const u = await api("/api/usage");
+      const totalNodes = wss.reduce((a, w) => a + (w.nodes || 0), 0);
+      const indexed = wss.filter((w) => w.nodes != null).length;
+      const quota = u.plan.max_api_calls_month > 0
+        ? Math.max(0, 100 - Math.round((u.usage.api_calls / u.plan.max_api_calls_month) * 100)) : 100;
+      $("#dv-badges").innerHTML = `
+        <span class="bdg">⚯ ${indexed} / ${wss.length} indexés</span>
+        <span class="bdg">❋ ${cn(totalNodes)} nœuds</span>
+        <span class="bdg ok">✓ ${quota} % de quota API restant</span>`;
+      paintCols("#dv-chart-api", "#dv-axis-api", u.daily, "api");
+      paintCols("#dv-chart-mcp", "#dv-axis-mcp", u.daily, "mcp");
+      const s7 = (k) => u.daily.reduce((a, d) => a + d[k], 0);
+      $("#dv-d-api").textContent = `↑ ${cn(s7("api"))} · 7 j`;
+      $("#dv-d-mcp").textContent = `↑ ${cn(s7("mcp"))} · 7 j`;
+      $("#dv-activity").innerHTML = `
+        <div class="act-row good"><span class="ic">✓</span> Appels API réussis <span class="n">${nf.format(u.usage.api_calls)}</span></div>
+        <div class="act-row"><span class="ic">⚯</span> Appels MCP <span class="n">${nf.format(u.usage.mcp_calls)}</span></div>
+        <div class="act-row"><span class="ic">⬆</span> Téléversements <span class="n">${u.usage.uploads}</span></div>
+        <div class="act-row"><span class="ic">◍</span> Données reçues <span class="n">${(u.usage.uploaded_bytes / 1048576).toFixed(1)} Mo</span></div>`;
+    } catch { $("#dv-badges").innerHTML = ""; }
+
+    $("#dv-density").innerHTML = [...wss].sort((a, b) => (b.nodes || 0) - (a.nodes || 0)).map((w) => `
+      <div class="item" data-ws="${esc(w.id)}">
+        <span class="swatch" style="background:${w.id === S.ws ? "var(--accent)" : "var(--border)"}"></span>
+        <span class="nm">${esc(w.name)}</span>
+        <span class="rt"><span class="num">${cn(w.nodes || 0)}</span></span>
+      </div>`).join("");
+    $$("#dv-density .item").forEach((it) => {
+      it.onclick = async () => { S.ws = it.dataset.ws; GStore.set(LS.ws, S.ws); await enter(); };
+    });
+  }
+
+  async function loadCombined() {
+    const wss = S.workspaces && S.workspaces.length ? S.workspaces : (await api("/api/workspaces")).workspaces;
+    if (!wss.length) return toast("Aucun workspace à combiner");
+    // Seed an (empty) payload so show("graph") doesn't fire its own loadGraph()
+    // that would race — and possibly win against — the merged slice below.
+    graph.setData({ nodes: [], links: [] });
+    show("graph");
+    $("#g-stat").innerHTML = `<span class="spin"></span> combinaison…`;
+    const parts = await Promise.all(wss.map(async (w) => {
+      try { return [w, await api("/api/graph", { mode: "top", limit: 120 }, { ws: w.id })]; }
+      catch { return [w, null]; }
+    }));
+    const nodes = [], links = [];
+    parts.forEach(([w, r], i) => {
+      if (!r) return;
+      r.nodes.forEach((n) => nodes.push({ ...n, id: w.slug + ":" + n.id, community: i }));
+      const ids = new Set(r.nodes.map((n) => n.id));
+      r.links.forEach((l) => {
+        if (ids.has(l.source) && ids.has(l.target))
+          links.push({ source: w.slug + ":" + l.source, target: w.slug + ":" + l.target, relation: l.relation, confidence: l.confidence });
+      });
+    });
+    const merged = { nodes, links };
+    graph.setData(merged);
+    $("#g-stat").textContent = `graphique combiné · ${nf.format(nodes.length)} nœuds · ${nf.format(links.length)} arêtes · ${wss.length} workspaces`;
+    $("#glegend").innerHTML = `<h2 style="margin-bottom:6px">Workspaces</h2>` + parts.filter((x) => x[1]).map(([w], i) =>
+      `<div class="li"><span class="d" style="background:${comColor(i)}"></span><span>${esc(w.name)}</span><span class="c">${w.nodes != null ? cn(w.nodes) : ""}</span></div>`).join("");
   }
 
   function paintOverviewBars() {
@@ -137,7 +267,7 @@
     $("#ov-conf").innerHTML = Object.entries(conf).map(([k, n]) => {
       const col = k === "EXTRACTED" ? "var(--ok)" : k === "INFERRED" ? "var(--warn)" : "var(--danger)";
       return `<div class="bar-row"><span class="nm">${esc(k)}</span><span class="track"><span class="fill" style="width:${(n / confTot * 100).toFixed(1)}%;background:${col}"></span></span><span class="n">${(n / confTot * 100).toFixed(1)}%</span></div>`;
-    }).join("") || `<p class="empty">no edges yet</p>`;
+    }).join("") || `<p class="empty">pas encore d'arêtes</p>`;
 
     const files = st.top_files || [];
     const maxF = files.length ? files[0][1] : 1;
@@ -148,7 +278,7 @@
   const godRow = (g) => `<div class="item" data-node="${esc(g.id)}">
       <span class="swatch" style="background:${comColor(g.community)}"></span>
       <span style="min-width:0"><span class="nm">${esc(g.label)}</span><br><span class="mt">${esc(g.source_file || "")}${g.source_location ? " · " + esc(g.source_location) : ""}</span></span>
-      <span class="rt"><span class="num">${nf.format(g.degree)}</span><br><span class="mt">degree</span></span>
+      <span class="rt"><span class="num">${nf.format(g.degree)}</span><br><span class="mt">degré</span></span>
     </div>`;
 
   function bindItems(root) { $$(".item[data-node]", root).forEach((it) => { it.onclick = () => openNode(it.dataset.node); }); }
@@ -159,7 +289,7 @@
       show("graph");
       await graph.focus(r.node.id);
       inspector(r.node);
-    } catch (e) { toast("Not found: " + e.message); }
+    } catch (e) { toast("Introuvable : " + e.message); }
   }
 
   async function loadGods() {
@@ -179,7 +309,7 @@
           <span class="mt">${esc(c.sample.slice(0, 5).join(", "))}</span><br>
           <span class="mt">${c.relations.map(([r, n]) => `${esc(r)} ${n}`).join(" · ")}</span>
         </span>
-        <span class="rt"><span class="num">${nf.format(c.size)}</span><br><span class="mt">nodes</span></span>
+        <span class="rt"><span class="num">${nf.format(c.size)}</span><br><span class="mt">nœuds</span></span>
       </div>`).join("");
     $$("#cm-list .item").forEach((it) => {
       it.onclick = () => { show("graph"); $("#g-mode").value = "community"; syncMode(); loadGraph(); };
@@ -196,7 +326,7 @@
   async function loadGraph() {
     const mode = $("#g-mode").value;
     const limit = +$("#g-limit").value;
-    $("#g-stat").innerHTML = `<span class="spin"></span> slicing…`;
+    $("#g-stat").innerHTML = `<span class="spin"></span> découpage…`;
     try {
       const r = await api("/api/graph", {
         mode, limit,
@@ -205,16 +335,16 @@
         depth: 1,
       });
       graph.setData(r);
-      $("#g-stat").textContent = `${nf.format(r.nodes.length)} nodes · ${nf.format(r.links.length)} edges shown`;
+      $("#g-stat").textContent = `${nf.format(r.nodes.length)} nœuds · ${nf.format(r.links.length)} arêtes affichés`;
       legend(r);
-    } catch (e) { $("#g-stat").textContent = "error: " + e.message; }
+    } catch (e) { $("#g-stat").textContent = "erreur : " + e.message; }
   }
 
   function legend(r) {
     const counts = new Map();
     r.nodes.forEach((n) => counts.set(n.community, (counts.get(n.community) || 0) + 1));
     const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12);
-    $("#glegend").innerHTML = `<h2 style="margin-bottom:6px">Communities</h2>` + top.map(([c, n]) =>
+    $("#glegend").innerHTML = `<h2 style="margin-bottom:6px">Communautés</h2>` + top.map(([c, n]) =>
       `<div class="li" data-comm="${c}"><span class="d" style="background:${comColor(c)}"></span>
        <span>#${c}</span><span class="c">${n}</span></div>`).join("");
     $$("#glegend .li").forEach((li) => {
@@ -228,10 +358,10 @@
     box.innerHTML = `<div style="display:flex;gap:8px;align-items:flex-start">
         <span class="swatch" style="background:${comColor(n.community)};margin-top:6px"></span>
         <div style="min-width:0;flex:1"><div class="ttl">${esc(n.label)}</div>
-        <div class="kv"><span>degree</span><b>${nf.format(n.degree)}</b><span>· community</span><b>#${n.community ?? "–"}</b></div>
+        <div class="kv"><span>degré</span><b>${nf.format(n.degree)}</b><span>· communauté</span><b>#${n.community ?? "–"}</b></div>
         <div class="kv"><span>${esc(n.source_file || "no file")}${n.source_location ? " " + esc(n.source_location) : ""}</span></div></div>
         <button class="btn sm" id="ins-close">✕</button></div>
-      <h2 style="margin:14px 0 6px">Connections · ${nf.format(n.connection_count)}</h2>
+      <h2 style="margin:14px 0 6px">Connexions · ${nf.format(n.connection_count)}</h2>
       <div id="ins-conns"></div>`;
     $("#ins-close").onclick = () => box.classList.remove("on");
     const wrap = $("#ins-conns");
@@ -424,39 +554,39 @@
   // ----------------------------------------------------------- query view
   async function runQuery(draw) {
     const q = $("#qq").value.trim(); if (!q) return;
-    $("#q-out").innerHTML = `<p class="empty"><span class="spin"></span> traversing…</p>`;
+    $("#q-out").innerHTML = `<p class="empty"><span class="spin"></span> parcours…</p>`;
     try {
       const r = await api("/api/query", { q, depth: 1, budget: 2000 });
       if (!r.ok) { $("#q-out").innerHTML = `<p class="empty">${esc(r.error)}</p>`; return; }
       $("#q-out").innerHTML = `<div class="hop">${r.seeds.map((s) => `<span class="n" style="border-color:${comColor(s.community)}">${esc(s.label)}</span>`).join("")}</div>
-        <p class="sub" style="margin-top:10px">Scoped subgraph: <b class="num">${r.nodes.length}</b> nodes · <b class="num">${r.links.length}</b> edges · ≈<b class="num">${nf.format(r.tokens)}</b> tokens (vs re-reading the sources).</p>`;
+        <p class="sub" style="margin-top:10px">Sous-graphe ciblé : <b class="num">${r.nodes.length}</b> nœuds · <b class="num">${r.links.length}</b> arêtes · ≈<b class="num">${nf.format(r.tokens)}</b> tokens (vs relire les sources).</p>`;
       if (draw) { show("graph"); graph.setData(r); $("#g-stat").textContent = `query: ${q}`; legend(r); }
     } catch (e) { $("#q-out").innerHTML = `<p class="empty">${esc(e.message)}</p>`; }
   }
 
   async function runPath() {
     const a = $("#pa").value.trim(), b = $("#pb").value.trim(); if (!a || !b) return;
-    $("#p-out").innerHTML = `<p class="empty"><span class="spin"></span> tracing…</p>`;
+    $("#p-out").innerHTML = `<p class="empty"><span class="spin"></span> tracé…</p>`;
     try {
       const r = await api("/api/path", { a, b });
-      if (!r.ok) { $("#p-out").innerHTML = `<p class="empty">${esc(r.error)} between “${esc(a)}” and “${esc(b)}”</p>`; return; }
-      $("#p-out").innerHTML = `<p class="sub">Shortest path — <b class="num">${r.hops}</b> hop${r.hops === 1 ? "" : "s"}</p>
+      if (!r.ok) { $("#p-out").innerHTML = `<p class="empty">${esc(r.error)} entre « ${esc(a)} » et « ${esc(b)} »</p>`; return; }
+      $("#p-out").innerHTML = `<p class="sub">Chemin le plus court — <b class="num">${r.hops}</b> saut${r.hops === 1 ? "" : "s"}</p>
         <div class="hop">${r.steps.map((s, i) => `${i ? `<span class="e">--${esc((s.edge && s.edge.relation) || "")}${s.edge && s.edge.forward === false ? " (rev)" : ""}--></span>` : ""}<span class="n" style="border-color:${comColor(s.community)}">${esc(s.label)}</span>`).join("")}</div>`;
     } catch (e) { $("#p-out").innerHTML = `<p class="empty">${esc(e.message)}</p>`; }
   }
 
   async function runExplain() {
     const n = $("#ex").value.trim(); if (!n) return;
-    $("#e-out").innerHTML = `<p class="empty"><span class="spin"></span> loading…</p>`;
+    $("#e-out").innerHTML = `<p class="empty"><span class="spin"></span> chargement…</p>`;
     try {
       const node = (await api("/api/explain", { node: n })).node;
       $("#e-out").innerHTML = `<pre class="out"><b>${esc(node.label)}</b>
-  source:    ${esc(node.source_file || "—")} ${esc(node.source_location || "")}
-  community: #${node.community ?? "—"}
-  degree:    ${nf.format(node.degree)}
-  relations: ${node.by_relation.map(([k, v]) => `${esc(k)}(${v})`).join(", ")}
+  source :     ${esc(node.source_file || "—")} ${esc(node.source_location || "")}
+  communauté : #${node.community ?? "—"}
+  degré :      ${nf.format(node.degree)}
+  relations :  ${node.by_relation.map(([k, v]) => `${esc(k)}(${v})`).join(", ")}
 
-connections (${nf.format(node.connection_count)}):
+connexions (${nf.format(node.connection_count)}) :
 ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : "<--"} ${esc(c.label)} [${esc(c.relation)}] [${esc(c.confidence || "?")}]`).join("\n")}</pre>`;
     } catch (e) { $("#e-out").innerHTML = `<p class="empty">${esc(e.message)}</p>`; }
   }
@@ -469,22 +599,22 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
     try {
       const r = await api("/api/ide-config", { host: S.ide });
       $("#ide-mcp").textContent = r.mcp_enabled
-        ? `POST ${r.mcp_url}\nAuthorization: Bearer gf_…   (workspace: ${r.workspace})\n\n# standalone, if you prefer a dedicated process:\npython -m graphify.serve graphify-out/graph.json \\\n  --transport http --host 0.0.0.0 --port 8080`
+        ? `POST ${r.mcp_url}\nAuthorization: Bearer gf_…   (workspace: ${r.workspace})\n\n# autonome, si vous préférez un processus dédié :\npython -m graphify.serve graphify-out/graph.json \\\n  --transport http --host 0.0.0.0 --port 8080`
         : `MCP endpoint not available in this process.\npip install "graphifyy[mcp]"   # then restart`;
       $("#ide-code").textContent = JSON.stringify(r.config, null, 2);
-      $("#ide-copy").onclick = () => { navigator.clipboard.writeText(JSON.stringify(r.config, null, 2)).then(() => toast("Config copied")); };
+      $("#ide-copy").onclick = () => { navigator.clipboard.writeText(JSON.stringify(r.config, null, 2)).then(() => toast("Config copiée")); };
     } catch (e) { $("#ide-code").textContent = String(e.message); }
 
     const eps = [
-      ["GET /api/stats", "nodes, edges, communities, relation mix, confidence split"],
-      ["GET /api/god-nodes?limit=15", "most-connected concepts"],
-      ["GET /api/communities?limit=24", "subsystems with hub + members"],
-      ["GET /api/search?q=…", "type-ahead symbol lookup"],
-      ["GET /api/explain?node=…", "one node + all its connections"],
-      ["GET /api/path?a=…&b=…", "shortest path, hop by hop"],
-      ["GET /api/query?q=…", "question → scoped subgraph (token-budgeted)"],
-      ["GET /api/graph?mode=top|focus|community", "canvas payload, sliced server-side"],
-      ["GET /api/theme", "palette tokens, so an extension can match the UI"],
+      ["GET /api/stats", "nœuds, arêtes, communautés, mix de relations, confiance"],
+      ["GET /api/god-nodes?limit=15", "concepts les plus connectés"],
+      ["GET /api/communities?limit=24", "sous-systèmes avec hub + membres"],
+      ["GET /api/search?q=…", "recherche de symbole en tapant"],
+      ["GET /api/explain?node=…", "un nœud + toutes ses connexions"],
+      ["GET /api/path?a=…&b=…", "chemin le plus court, saut par saut"],
+      ["GET /api/query?q=…", "question → sous-graphe ciblé (budget de tokens)"],
+      ["GET /api/graph?mode=top|focus|community", "payload canvas, découpé côté serveur"],
+      ["GET /api/theme", "tokens de palette, pour qu'une extension s'accorde à l'UI"],
     ];
     $("#api-list").innerHTML = eps.map(([e, d]) => `<div class="item" style="cursor:default">
         <code style="font-size:12px;color:var(--accent);white-space:nowrap">${esc(e)}</code>
@@ -500,12 +630,12 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
       target.innerHTML = r.keys.length ? r.keys.map((k) => `<div class="item" style="cursor:default">
           <span class="swatch" style="background:${k.revoked_at ? "var(--faint)" : "var(--ok)"}"></span>
           <span style="min-width:0"><span class="nm">${esc(k.name)}</span> <code style="color:var(--faint)">${esc(k.prefix)}…</code><br>
-          <span class="mt">created ${ago(k.created_at)} · last used ${ago(k.last_used_at)}${k.revoked_at ? " · revoked " + ago(k.revoked_at) : ""}</span></span>
-          <span class="rt">${k.revoked_at ? `<span class="pill">revoked</span>` : `<button class="btn sm" data-rev="${esc(k.id)}">Revoke</button>`}</span>
-        </div>`).join("") : `<p class="empty">No key yet — create one to connect an IDE or an agent.</p>`;
+          <span class="mt">créée ${ago(k.created_at)} · dernier usage ${ago(k.last_used_at)}${k.revoked_at ? " · révoquée " + ago(k.revoked_at) : ""}</span></span>
+          <span class="rt">${k.revoked_at ? `<span class="pill">révoquée</span>` : `<button class="btn sm" data-rev="${esc(k.id)}">Révoquer</button>`}</span>
+        </div>`).join("") : `<p class="empty">Aucune clé pour l'instant — créez-en une pour connecter un IDE ou un agent.</p>`;
       $$("[data-rev]", target).forEach((b) => {
         b.onclick = async () => {
-          try { await api(`/api/keys/${b.dataset.rev}`, null, { method: "DELETE" }); toast("Key revoked"); loadKeys(target); if (S.view === "account") loadKeys($("#acc-keys")); } catch (e) { toast(e.message); }
+          try { await api(`/api/keys/${b.dataset.rev}`, null, { method: "DELETE" }); toast("Clé révoquée"); loadKeys(target); if (S.view === "account") loadKeys($("#acc-keys")); } catch (e) { toast(e.message); }
         };
       });
     } catch (e) { target.innerHTML = `<p class="empty">${esc(e.message)}</p>`; }
@@ -523,8 +653,8 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
       $("#acc-ws").innerHTML = me.workspaces.map((w) => `<div class="item" data-ws="${esc(w.id)}">
           <span class="swatch" style="background:${w.id === me.active ? "var(--accent)" : "var(--border)"}"></span>
           <span style="min-width:0"><span class="nm">${esc(w.name)}</span><br>
-          <span class="mt">${esc(w.graph)} · ${esc(w.role)}${w.graph_ready ? "" : " · graph missing"}</span></span>
-          <span class="rt">${w.nodes != null ? `<span class="num">${nf.format(w.nodes)}</span><br><span class="mt">nodes</span>` : ""}</span></div>`).join("");
+          <span class="mt">${esc(w.graph)} · ${esc(w.role)}${w.graph_ready ? "" : " · graphe manquant"}</span></span>
+          <span class="rt">${w.nodes != null ? `<span class="num">${nf.format(w.nodes)}</span><br><span class="mt">nœuds</span>` : ""}</span></div>`).join("");
       $$("#acc-ws .item").forEach((it) => {
         it.onclick = async () => { S.ws = it.dataset.ws; GStore.set(LS.ws, S.ws); await enter(); show("account"); };
       });
@@ -542,7 +672,6 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
       <span class="track" style="height:9px"><span class="fill" style="width:${pct.toFixed(1)}%;background:${col}"></span></span>
       <span class="n" style="width:auto">${fmt(used)} / ${fmt(cap)}</span></div>`;
   }
-  const cn = (n) => (n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(n));
 
   async function loadBilling() {
     try {
@@ -554,39 +683,39 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
           <div style="display:flex;align-items:baseline;gap:10px">
             <h2 style="margin:0;font-size:17px;text-transform:none;letter-spacing:0;color:var(--text)">${esc(pl.name)}</h2>
             <span class="num" style="font-size:22px">${money(pl.price_month)}<span class="mt">/mo</span></span>
-            ${id === cur.id ? `<span class="pill" style="margin-left:auto">current</span>` : ""}
+            ${id === cur.id ? `<span class="pill" style="margin-left:auto">actuel</span>` : ""}
           </div>
           <p class="sub" style="margin:8px 0 12px">${esc(pl.blurb)}</p>
           <div class="sub" style="font-size:12.5px;line-height:1.9">
-            ${cn(pl.max_workspaces)} workspaces · ${pl.max_members} seats<br>
-            ${cn(pl.max_nodes)} nodes per graph<br>
-            ${cn(pl.max_api_calls_month)} API calls / month<br>
-            ${pl.max_upload_mb} MB uploads
+            ${cn(pl.max_workspaces)} workspaces · ${pl.max_members} sièges<br>
+            ${cn(pl.max_nodes)} nœuds par graphe<br>
+            ${cn(pl.max_api_calls_month)} appels API / mois<br>
+            ${pl.max_upload_mb} Mo de téléversements
           </div>
-          ${id === cur.id ? "" : `<button class="btn primary wide" style="margin-top:14px" data-plan="${id}">Switch to ${esc(pl.name)}</button>`}
+          ${id === cur.id ? "" : `<button class="btn primary wide" style="margin-top:14px" data-plan="${id}">Passer à ${esc(pl.name)}</button>`}
         </div>`).join("");
       $$("[data-plan]").forEach((b) => {
         b.onclick = async () => {
           try {
             await api("/api/billing/plan", null, { method: "POST", body: { plan: b.dataset.plan } });
-            toast("Plan updated"); loadBilling();
+            toast("Plan mis à jour"); loadBilling();
           } catch (e) { toast(e.message); }
         };
       });
 
       const u = r.usage, pl = cur;
       $("#bl-bars").innerHTML =
-        bar("API calls", u.api_calls, pl.max_api_calls_month, cn) +
-        bar("MCP calls", u.mcp_calls, pl.max_api_calls_month, cn) +
-        bar("Uploads", u.uploads, 100, cn) +
-        bar("Seats", r.counts.members, pl.max_members, cn) +
-        bar("Workspaces (you)", r.counts.workspaces, pl.max_workspaces, cn);
+        bar("Appels API", u.api_calls, pl.max_api_calls_month, cn) +
+        bar("Appels MCP", u.mcp_calls, pl.max_api_calls_month, cn) +
+        bar("Téléversements", u.uploads, 100, cn) +
+        bar("Sièges", r.counts.members, pl.max_members, cn) +
+        bar("Workspaces (vous)", r.counts.workspaces, pl.max_workspaces, cn);
 
       $("#bl-hist").innerHTML = r.history.length
-        ? `<table class="tbl" style="margin-top:0"><thead><tr><th>Period</th><th>API</th><th>MCP</th><th>Uploads</th><th>Bytes</th></tr></thead><tbody>` +
-          r.history.map((h) => `<tr><td>${esc(h.period)}</td><td>${cn(h.api_calls)}</td><td>${cn(h.mcp_calls)}</td><td>${h.uploads}</td><td>${(h.uploaded_bytes / 1048576).toFixed(1)} MB</td></tr>`).join("") +
+        ? `<table class="tbl" style="margin-top:0"><thead><tr><th>Période</th><th>API</th><th>MCP</th><th>Télév.</th><th>Octets</th></tr></thead><tbody>` +
+          r.history.map((h) => `<tr><td>${esc(h.period)}</td><td>${cn(h.api_calls)}</td><td>${cn(h.mcp_calls)}</td><td>${h.uploads}</td><td>${(h.uploaded_bytes / 1048576).toFixed(1)} Mo</td></tr>`).join("") +
           `</tbody></table>`
-        : `<p class="empty">No usage recorded yet.</p>`;
+        : `<p class="empty">Aucun usage enregistré pour l'instant.</p>`;
     } catch (e) { $("#bl-bars").innerHTML = `<p class="empty">${esc(e.message)}</p>`; }
   }
 
@@ -597,26 +726,26 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
           <span class="swatch" style="background:${x.role === "owner" ? "var(--accent)" : x.role === "member" ? "var(--ok)" : "var(--faint)"}"></span>
           <span style="min-width:0"><span class="nm">${esc(x.name || x.email)}</span><br><span class="mt">${esc(x.email)}</span></span>
           <span class="rt"><span class="pill">${esc(x.role)}</span>
-          ${x.role !== "owner" ? ` <button class="btn sm" data-rm="${esc(x.id)}">Remove</button>` : ""}</span>
+          ${x.role !== "owner" ? ` <button class="btn sm" data-rm="${esc(x.id)}">Retirer</button>` : ""}</span>
         </div>`).join("");
       $$("[data-rm]").forEach((b) => {
         b.onclick = async () => {
-          try { await api(`/api/members/${b.dataset.rm}`, null, { method: "DELETE" }); toast("Member removed"); loadTeam(); }
+          try { await api(`/api/members/${b.dataset.rm}`, null, { method: "DELETE" }); toast("Membre retiré"); loadTeam(); }
           catch (e) { toast(e.message); }
         };
       });
       $("#tm-go").onclick = async () => {
         const email = $("#tm-email").value.trim();
-        if (!email) return toast("Email required");
+        if (!email) return toast("Email requis");
         try {
           const r = await api("/api/invites", null, {
             method: "POST", body: { email, role: $("#tm-role").value },
           });
           $("#tm-link").innerHTML = `<div class="card" style="border-color:var(--ok);margin-top:12px">
-            <div class="sub" style="margin-bottom:6px">Send this link — it is bound to ${esc(email)}:</div>
+            <div class="sub" style="margin-bottom:6px">Envoyez ce lien — il est lié à ${esc(email)} :</div>
             <div class="code" style="white-space:pre-wrap;word-break:break-all;color:var(--text)">${esc(r.accept_url)}</div>
-            <button class="btn sm" style="margin-top:8px" id="tm-copy">Copy link</button></div>`;
-          $("#tm-copy").onclick = () => navigator.clipboard.writeText(r.accept_url).then(() => toast("Link copied"));
+            <button class="btn sm" style="margin-top:8px" id="tm-copy">Copier le lien</button></div>`;
+          $("#tm-copy").onclick = () => navigator.clipboard.writeText(r.accept_url).then(() => toast("Lien copié"));
           $("#tm-email").value = "";
           loadTeam();
         } catch (e) { toast(e.message); }
@@ -624,12 +753,12 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
       const iv = await api("/api/invites");
       $("#tm-invites").innerHTML = iv.invites.length ? iv.invites.map((x) => `<div class="item" style="cursor:default">
           <span class="swatch" style="background:${x.accepted_at ? "var(--ok)" : "var(--warn)"}"></span>
-          <span style="min-width:0"><span class="nm">${esc(x.email)}</span><br><span class="mt">${esc(x.role)} · ${x.accepted_at ? "accepted" : "pending · expires " + ago(x.expires_at)}</span></span>
-          <span class="rt">${x.accepted_at ? `<span class="pill">accepted</span>` : `<button class="btn sm" data-rv="${esc(x.id)}">Revoke</button>`}</span>
-        </div>`).join("") : `<p class="empty">No pending invites.</p>`;
+          <span style="min-width:0"><span class="nm">${esc(x.email)}</span><br><span class="mt">${esc(x.role)} · ${x.accepted_at ? "acceptée" : "en attente · expire " + ago(x.expires_at)}</span></span>
+          <span class="rt">${x.accepted_at ? `<span class="pill">acceptée</span>` : `<button class="btn sm" data-rv="${esc(x.id)}">Révoquer</button>`}</span>
+        </div>`).join("") : `<p class="empty">Aucune invitation en attente.</p>`;
       $$("[data-rv]").forEach((b) => {
         b.onclick = async () => {
-          try { await api(`/api/invites/${b.dataset.rv}`, null, { method: "DELETE" }); toast("Invite revoked"); loadTeam(); }
+          try { await api(`/api/invites/${b.dataset.rv}`, null, { method: "DELETE" }); toast("Invitation révoquée"); loadTeam(); }
           catch (e) { toast(e.message); }
         };
       });
@@ -646,7 +775,7 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
       sse = new EventSource("/api/events?token=" + encodeURIComponent(tok || ""), { withCredentials: true });
     } catch { return; }
     sse.addEventListener("graph", async () => {
-      toast("Graph rebuilt — refreshing");
+      toast("Graphe reconstruit — actualisation…");
       try {
         S.stats = await api("/api/stats");
         if (S.view === "overview") loadOverview();
@@ -674,7 +803,7 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
                 <span class="sw" style="background:${comColor(n.community)}"></span>
                 <span class="nm">${esc(n.label)}</span>
                 <span class="meta">${esc(String(n.source_file || "").split("/").pop())} · ${nf.format(n.degree)}</span></div>`).join("")
-            : `<div class="row"><span class="mt">no match</span></div>`;
+            : `<div class="row"><span class="mt">aucun résultat</span></div>`;
           pop.style.display = "block";
           $$(".row[data-node]", pop).forEach((row) => { row.onclick = () => { close(); inp.value = ""; openNode(row.dataset.node); }; });
         } catch { close(); }
@@ -697,7 +826,7 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
     $("#verpill").textContent = (me.workspaces.find((w) => w.id === S.ws) || {}).slug || "workspace";
 
     if (!S.ws) {
-      $("#ov-sub").innerHTML = `No workspace yet. Create one in <b>People &amp; keys</b> — point it at a <code>graph.json</code> built with <code>graphify extract . --code-only</code>.`;
+      $("#ov-sub").innerHTML = `Pas encore de workspace. Créez-en un dans <b>Profil &amp; clés</b> — pointez-le vers un <code>graph.json</code> construit avec <code>graphify extract . --code-only</code>.`;
       $("#ov-stats").innerHTML = ""; $("#ov-rel").innerHTML = ""; $("#ov-conf").innerHTML = ""; $("#ov-files").innerHTML = ""; $("#ov-gods").innerHTML = "";
       show("account");
       return;
@@ -716,6 +845,17 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
 
   // ------------------------------------------------------------------ boot
   async function boot() {
+    if (GStore.get("graphify.navfold") === "1") document.body.classList.add("folded");
+    $("#btn-fold").onclick = () => {
+      const folded = document.body.classList.toggle("folded");
+      GStore.set("graphify.navfold", folded ? "1" : "");
+      setTimeout(() => graph.resize(), 220);
+    };
+    $("#dv-combined").onclick = loadCombined;
+    $("#dv-all").onclick = (e) => {
+      const wrap = $("#dv-repos").classList.toggle("wrap");
+      e.currentTarget.firstChild.textContent = wrap ? "Réduire " : "Afficher tout ";
+    };
     $$("#nav button[data-view]").forEach((b) => { b.onclick = () => show(b.dataset.view); });
     $("#btn-ide").onclick = () => show("ide");
     $("#btn-keys").onclick = () => show("ide");
@@ -736,10 +876,10 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
       try {
         const r = await api("/api/keys", null, { method: "POST", body: { name: $("#key-name").value || "default" } });
         $("#key-secret").innerHTML = `<div class="card" style="border-color:var(--ok);margin-bottom:10px">
-            <div class="sub" style="margin-bottom:6px">Copy it now — it is stored hashed and never shown again:</div>
+            <div class="sub" style="margin-bottom:6px">Copiez-la maintenant — elle est stockée hashée et ne sera plus jamais montrée :</div>
             <div class="code" style="white-space:pre-wrap;word-break:break-all;color:var(--text)">${esc(r.key.secret)}</div>
-            <button class="btn sm" style="margin-top:8px" id="sec-copy">Copy key</button></div>`;
-        $("#sec-copy").onclick = () => navigator.clipboard.writeText(r.key.secret).then(() => toast("Key copied"));
+            <button class="btn sm" style="margin-top:8px" id="sec-copy">Copier la clé</button></div>`;
+        $("#sec-copy").onclick = () => navigator.clipboard.writeText(r.key.secret).then(() => toast("Clé copiée"));
         $("#key-name").value = "";
         loadKeys($("#key-list"));
       } catch (e) { toast(e.message); }
@@ -748,7 +888,7 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
       try {
         const r = await api("/api/workspaces", null, { method: "POST", body: { name: $("#nw-name").value, graph: $("#nw-graph").value } });
         S.ws = r.workspace.id; GStore.set(LS.ws, S.ws);
-        toast("Workspace created"); await enter(); show("account");
+        toast("Workspace créé"); await enter(); show("account");
       } catch (e) { $("#nw-hint").innerHTML = `<span style="color:var(--danger)">${esc(e.message)}</span>`; }
     };
     $("#nw-file").onchange = () => {
@@ -757,11 +897,11 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
     };
     $("#nw-up").onclick = async () => {
       const f = $("#nw-file").files[0];
-      if (!f) return toast("Choose a graph.json first");
+      if (!f) return toast("Choisissez d'abord un graph.json");
       const fd = new FormData();
       fd.append("file", f);
       fd.append("name", $("#nw-name").value || f.name.replace(/\.json$/, ""));
-      $("#nw-hint").innerHTML = `<span class="spin"></span> uploading…`;
+      $("#nw-hint").innerHTML = `<span class="spin"></span> téléversement…`;
       try {
         const r = await fetch("/api/workspaces/upload", {
           method: "POST",
@@ -771,7 +911,7 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
         S.ws = j.workspace.id; GStore.set(LS.ws, S.ws);
-        $("#nw-hint").textContent = `Created ${j.workspace.slug} (${(j.bytes / 1048576).toFixed(1)} MB).`;
+        $("#nw-hint").textContent = `Créé : ${j.workspace.slug} (${(j.bytes / 1048576).toFixed(1)} Mo).`;
         $("#nw-file").value = ""; $("#nw-file-label").textContent = "Upload graph.json…";
         await enter(); show("account");
       } catch (e) { $("#nw-hint").innerHTML = `<span style="color:var(--danger)">${esc(e.message)}</span>`; }
@@ -789,7 +929,7 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
     // Health tells the gate whether a demo account was seeded at boot.
     try {
       const h = await api("/api/health");
-      $("#gate-foot").innerHTML = h.mcp ? "MCP endpoint live on <code>/mcp</code>" : "MCP extra not installed";
+      $("#gate-foot").innerHTML = h.mcp ? "Endpoint MCP actif sur <code>/mcp</code>" : "Extra MCP non installé";
     } catch {}
 
     S.ws = GStore.get(LS.ws) || null;

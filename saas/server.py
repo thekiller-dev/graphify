@@ -931,6 +931,7 @@ async def api_usage(request: Request) -> JSONResponse:
                 "members": len(a.members(p.workspace.id)),
                 "workspaces": len(a.workspaces_for(p.user.id)) if p.user else 0,
             },
+            "daily": a.daily_series(p.workspace.id, 9),
         }
     )
 

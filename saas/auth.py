@@ -240,6 +240,14 @@ CREATE TABLE IF NOT EXISTS usage (
   uploaded_bytes INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (workspace_id, period)
 );
+CREATE TABLE IF NOT EXISTS daily (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  day          TEXT NOT NULL,
+  api          INTEGER NOT NULL DEFAULT 0,
+  mcp          INTEGER NOT NULL DEFAULT 0,
+  uploads      INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (workspace_id, day)
+);
 CREATE TABLE IF NOT EXISTS invites (
   id           TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -449,6 +457,8 @@ CREATE INDEX IF NOT EXISTS idx_invites_ws ON invites(workspace_id);
         if not col:
             return
         period = period_now()
+        day = time.strftime("%Y-%m-%d")
+        dcol = {"api": "api", "mcp": "mcp", "upload": "uploads"}[kind]
         with self._lock, self._connect() as c:
             c.execute(
                 f"""INSERT INTO usage (workspace_id,period,{col},uploaded_bytes)
@@ -457,6 +467,14 @@ CREATE INDEX IF NOT EXISTS idx_invites_ws ON invites(workspace_id);
                       {col}={col}+excluded.{col},
                       uploaded_bytes=uploaded_bytes+excluded.uploaded_bytes""",
                 (ws_id, period, n, bytes_ if kind == "upload" else 0),
+            )
+            # Same event, per-day mirror: the dashboard charts are daily and
+            # monthly periods are too coarse to draw them.
+            c.execute(
+                f"""INSERT INTO daily (workspace_id,day,{dcol}) VALUES (?,?,?)
+                    ON CONFLICT(workspace_id,day) DO UPDATE SET
+                      {dcol}={dcol}+excluded.{dcol}""",
+                (ws_id, day, n),
             )
 
     def usage(self, ws_id: str, period: str | None = None) -> dict:
@@ -486,6 +504,26 @@ CREATE INDEX IF NOT EXISTS idx_invites_ws ON invites(workspace_id);
              "uploads": r["uploads"], "uploaded_bytes": r["uploaded_bytes"]}
             for r in rows
         ]
+
+    def daily_series(self, ws_id: str, days: int = 9) -> list[dict]:
+        """Per-day activity for the dashboard charts: oldest first, zero-filled
+        so a quiet week still draws seven honest columns."""
+        now = time.time()
+        out = [
+            {"day": time.strftime("%Y-%m-%d", time.gmtime(now - off * 86400)),
+             "api": 0, "mcp": 0, "uploads": 0}
+            for off in range(days - 1, -1, -1)
+        ]
+        idx = {r["day"]: r for r in out}
+        with self._lock, self._connect() as c:
+            rows = c.execute(
+                "SELECT * FROM daily WHERE workspace_id=? AND day>=?",
+                (ws_id, out[0]["day"]),
+            ).fetchall()
+        for r in rows:
+            if r["day"] in idx:
+                idx[r["day"]] = {"day": r["day"], "api": r["api"], "mcp": r["mcp"], "uploads": r["uploads"]}
+        return list(idx.values())
 
     def check_api_quota(self, ws: Workspace) -> None:
         limit = plan_of(ws.plan)["max_api_calls_month"]

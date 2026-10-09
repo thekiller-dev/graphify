@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Invitation — graphify</title>
+<title>Invitation — Grafik</title>
 <link rel="preconnect" href="https://api.fontshare.com" crossorigin>
 <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/theme.css">
 <link rel="stylesheet" href="/static/fonts.css">
 <link rel="stylesheet" href="/static/site.css">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='8' r='4' fill='%234F46E5'/%3E%3Ccircle cx='7' cy='23' r='4' fill='%230891B2'/%3E%3Ccircle cx='25' cy='23' r='4' fill='%23059669'/%3E%3Cpath d='M16 8 7 23M16 8l9 15M7 23h18' stroke='%234F46E5' stroke-width='1.6' fill='none'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M25.6 10.4A11.2 11.2 0 1 0 27.2 16' fill='none' stroke='%234F46E5' stroke-width='3.4' stroke-linecap='round'/%3E%3Cpath d='M17 16h10.2' stroke='%234F46E5' stroke-width='3.4' stroke-linecap='round'/%3E%3Ccircle cx='25.6' cy='10.4' r='3.4' fill='%230891B2'/%3E%3Ccircle cx='27.2' cy='16' r='3.4' fill='%23059669'/%3E%3Ccircle cx='10.2' cy='25.2' r='2.6' fill='%230891B2'/%3E%3C/svg%3E">
 </head>
 <body>
 <div class="auth-wrap">
@@ -17,31 +17,32 @@
     <canvas id="side-canvas"></canvas>
     <a class="brand" href="/">
       <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
-        <circle cx="16" cy="7" r="4.2" fill="var(--accent)"/>
-        <circle cx="6.5" cy="23.5" r="4.2" fill="var(--accent-2)"/>
-        <circle cx="25.5" cy="23.5" r="4.2" fill="var(--ok)"/>
-        <path d="M16 7 6.5 23.5M16 7l9.5 16.5M6.5 23.5h19" stroke="var(--accent)" stroke-width="1.7" fill="none" opacity=".7"/>
+        <path d="M25.6 10.4A11.2 11.2 0 1 0 27.2 16" fill="none" stroke="var(--accent)" stroke-width="3.4" stroke-linecap="round"/>
+<path d="M17 16h10.2" fill="none" stroke="var(--accent)" stroke-width="3.4" stroke-linecap="round"/>
+<circle cx="25.6" cy="10.4" r="3.4" fill="var(--accent-2)"/>
+<circle cx="27.2" cy="16" r="3.4" fill="var(--ok)"/>
+<circle cx="10.2" cy="25.2" r="2.6" fill="var(--accent-2)" opacity=".9"/>
       </svg>
-      graphify
+      Grafik
     </a>
-    <h2>One graph, the whole team.</h2>
+    <h2>Un graphe, toute l'équipe.</h2>
     <ul>
       <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m4 12.5 5 5L20 7"/></svg>
-        Members share the workspace, not the credentials — everyone signs in as themselves.</li>
+        Les membres partagent le workspace, pas les identifiants — chacun se connecte en son nom.</li>
       <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m4 12.5 5 5L20 7"/></svg>
-        Roles gate what each person can do: owner, member, viewer.</li>
+        Les rôles périmètrent ce que chacun peut faire : owner, member, viewer.</li>
       <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m4 12.5 5 5L20 7"/></svg>
-        Invites expire in 7 days and die the moment they are accepted.</li>
+        Les invitations expirent sous 7 jours et meurent dès qu'elles sont acceptées.</li>
     </ul>
     <div id="themes" title="Theme" style="margin-top:20px"></div>
   </aside>
 
   <main class="auth-main">
     <div class="auth-card">
-      <h1 id="inv-title">You're invited</h1>
-      <p class="sub" id="inv-lede">Checking the invitation…</p>
+      <h1 id="inv-title">Vous êtes invité</h1>
+      <p class="sub" id="inv-lede">Vérification de l'invitation…</p>
       <div id="inv-body" style="margin-top:22px"></div>
-      <p class="auth-foot"><a href="/">← back to the site</a></p>
+      <p class="auth-foot"><a href="/">← retour au site</a></p>
     </div>
   </main>
 </div>
@@ -56,49 +57,49 @@
   const body = $("#inv-body");
 
   const fail = (msg) => {
-    $("#inv-title").textContent = "Invitation unavailable";
+    $("#inv-title").textContent = "Invitation indisponible";
     $("#inv-lede").textContent = "";
     body.innerHTML = `<div class="auth-err" style="min-height:auto">${esc(msg)}</div>
-      <a class="btn wide lg" href="/">Back to graphify</a>`;
+      <a class="btn wide lg" href="/">Retour à Grafik</a>`;
   };
 
   (async () => {
-    if (!token) return fail("This link is missing its invitation token.");
+    if (!token) return fail("Ce lien n'a pas son jeton d'invitation.");
     let d;
     try { d = await (await fetch("/api/invites/lookup?token=" + encodeURIComponent(token))).json(); }
-    catch { return fail("Could not reach the server."); }
-    if (!d.ok) return fail(d.error || "Invite not found.");
+    catch { return fail("Serveur injoignable."); }
+    if (!d.ok) return fail(d.error || "Invitation introuvable.");
     const inv = d.invite;
-    $("#inv-title").textContent = `Join ${inv.workspace}`;
-    $("#inv-lede").textContent = `You were invited as ${inv.role} on the ${inv.slug} workspace.`;
+    $("#inv-title").textContent = `Rejoindre ${inv.workspace}`;
+    $("#inv-lede").textContent = `Vous avez été invité comme ${inv.role} sur le workspace ${inv.slug}.`;
 
     if (!d.signed_in) {
-      body.innerHTML = `<p class="sub" style="margin-bottom:16px">Sign in as
-        <b>${esc(inv.email)}</b> to accept — the invite is bound to that address.</p>
-        <a class="btn primary wide lg" href="/login?next=${encodeURIComponent("/invite?token=" + token)}">Sign in to accept</a>`;
+      body.innerHTML = `<p class="sub" style="margin-bottom:16px">Connectez-vous en tant que
+        <b>${esc(inv.email)}</b> pour accepter — l'invitation est liée à cette adresse.</p>
+        <a class="btn primary wide lg" href="/login?next=${encodeURIComponent("/invite?token=" + token)}">Se connecter pour accepter</a>`;
       return;
     }
     if (d.email !== inv.email) {
-      body.innerHTML = `<div class="auth-err" style="min-height:auto">You are signed in as
-        <b>${esc(d.email)}</b>, but this invite was sent to <b>${esc(inv.email)}</b>.</div>
-        <a class="btn wide lg" href="/login?next=${encodeURIComponent("/invite?token=" + token)}">Switch account</a>`;
+      body.innerHTML = `<div class="auth-err" style="min-height:auto">Vous êtes connecté en tant que
+        <b>${esc(d.email)}</b>, mais cette invitation a été envoyée à <b>${esc(inv.email)}</b>.</div>
+        <a class="btn wide lg" href="/login?next=${encodeURIComponent("/invite?token=" + token)}">Changer de compte</a>`;
       return;
     }
-    body.innerHTML = `<button class="btn primary wide lg" id="inv-go">Accept invitation</button>`;
+    body.innerHTML = `<button class="btn primary wide lg" id="inv-go">Accepter l'invitation</button>`;
     $("#inv-go").onclick = async (e) => {
       const b = e.currentTarget; b.disabled = true; b.innerHTML = `<span class="spin"></span>`;
       try {
         const r = await fetch("/api/invites/accept", {
           method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: "Bearer " + localStorage.getItem("graphify.token") },
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + (GStore.get("graphify.token") || "") },
           body: JSON.stringify({ token }),
         });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
-        localStorage.setItem("graphify.ws", j.workspace.id);
+        GStore.set("graphify.ws", j.workspace.id);
         location.href = "/app";
       } catch (err) {
-        b.disabled = false; b.textContent = "Accept invitation";
+        b.disabled = false; b.textContent = "Accepter l'invitation";
         body.insertAdjacentHTML("afterbegin", `<div class="auth-err">${esc(err.message)}</div>`);
       }
     };

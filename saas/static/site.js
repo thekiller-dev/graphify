@@ -119,11 +119,11 @@
       $("#tab-login").classList.toggle("on", m === "login");
       $("#tab-signup").classList.toggle("on", m === "signup");
       $("#f-name").style.display = m === "signup" ? "" : "none";
-      $("#au-title").textContent = m === "signup" ? "Create your workspace" : "Welcome back";
+      $("#au-title").textContent = m === "signup" ? "Créez votre workspace" : "Bon retour";
       $("#au-lede").textContent = m === "signup"
-        ? "One account, as many workspaces as you have codebases."
-        : "Sign in to open your workspaces.";
-      $("#au-go").textContent = m === "signup" ? "Create account" : "Sign in";
+        ? "Un compte, autant de workspaces que de codebases."
+        : "Connectez-vous pour ouvrir vos workspaces.";
+      $("#au-go").textContent = m === "signup" ? "Créer un compte" : "Connexion";
       $("#au-pass").autocomplete = m === "signup" ? "new-password" : "current-password";
       $("#au-err").textContent = "";
     };
@@ -138,7 +138,7 @@
       const wrap = document.createElement("div");
       wrap.style.margin = "14px 0 4px";
       wrap.innerHTML = `<button class="btn wide" type="button" id="au-demo"
-        style="border-style:dashed">Enter with the demo account</button>`;
+        style="border-style:dashed">Entrer avec le compte démo</button>`;
       form.before(wrap);
       $("#au-demo").onclick = async (e) => {
         const b = e.currentTarget; b.disabled = true; b.innerHTML = `<span class="spin"></span>`;
@@ -154,7 +154,7 @@
           location.href = base + "#token=" + encodeURIComponent(d.token);
         } catch (ex) {
           $("#au-err").textContent = ex.message;
-          b.disabled = false; b.textContent = "Enter with the demo account";
+          b.disabled = false; b.textContent = "Entrer avec le compte démo";
         }
       };
     }).catch(() => {});
