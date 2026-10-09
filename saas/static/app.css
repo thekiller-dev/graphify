@@ -338,3 +338,16 @@ body.folded #nav button { justify-content: center; padding: 9px 0; }
 .act-row .ic { width: 16px; text-align: center; color: var(--faint); }
 .act-row .n { margin-left: auto; font-weight: 650; font-variant-numeric: tabular-nums; }
 .act-row.good { background: color-mix(in srgb, var(--ok) 12%, var(--surface-2)); color: var(--ok); }
+
+/* markdown rendu (rapport) & divers */
+.chk { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.chk input { accent-color: var(--accent); }
+.md .md-h1 { font-size: 17px; font-weight: 660; margin: 16px 0 8px; }
+.md .md-h2 { font-size: 14.5px; font-weight: 640; margin: 14px 0 7px; color: var(--text); text-transform: none; letter-spacing: 0; }
+.md .md-h3, .md .md-h4 { font-size: 13px; font-weight: 620; margin: 12px 0 6px; color: var(--muted); text-transform: none; letter-spacing: 0; }
+.md .md-p { font-size: 12.8px; line-height: 1.65; color: var(--muted); margin: 6px 0; }
+.md .md-ul { margin: 6px 0 6px 18px; font-size: 12.8px; color: var(--muted); line-height: 1.7; }
+.md code { background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: 5px; padding: 0 4px; font-size: 11.5px; }
+.md table.tbl { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12px; }
+.md table.tbl td { border: 1px solid var(--border-soft); padding: 5px 8px; color: var(--muted); }
+.md table.tbl tr:first-child td { font-weight: 640; color: var(--text); background: var(--surface-2); }

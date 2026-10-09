@@ -14,7 +14,7 @@
   const ago = (ts) => { if (!ts) return "jamais"; const d = Date.now() / 1000 - ts; if (d < 60) return "à l'instant"; if (d < 3600) return `il y a ${Math.floor(d / 60)} min`; if (d < 86400) return `il y a ${Math.floor(d / 3600)} h`; return `il y a ${Math.floor(d / 86400)} j`; };
 
   const LS = { token: "graphify.token", ws: "graphify.ws", theme: "graphify.theme" };
-  const S = { theme: null, pal: null, stats: null, comms: [], view: "overview", ide: "vscode", me: null, ws: null, authMode: "login" };
+  const S = { theme: null, pal: null, stats: null, comms: [], view: "overview", ide: "vscode", me: null, ws: null, authMode: "login", seenBuilds: {} };
 
   // ------------------------------------------------------------------- api
   async function api(path, params, opts = {}) {
@@ -88,6 +88,8 @@
     if (view === "account") loadAccount();
     if (view === "billing") loadBilling();
     if (view === "team") loadTeam();
+    if (view === "builds") loadBuilds();
+    if (view === "report") loadReport();
   }
 
   function bindWorkspaceSwitcher(list, active) {
@@ -765,6 +767,74 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
     } catch (e) { $("#tm-members").innerHTML = `<p class="empty">${esc(e.message)}</p>`; }
   }
 
+  // ------------------------------------------------- builds & rapport
+  const JOB_FR = { queued: "en file", running: "en cours", done: "terminé", failed: "échoué" };
+  async function loadBuilds() {
+    try {
+      const r = await api("/api/builds");
+      $("#bd-jobs").innerHTML = r.jobs.length ? r.jobs.map((j) => `<div class="item" style="cursor:default">
+          <span class="swatch" style="background:${j.status === "done" ? "var(--ok)" : j.status === "failed" ? "var(--danger)" : "var(--warn)"}"></span>
+          <span style="min-width:0"><span class="nm">${esc(j.name)}</span> <code style="color:var(--faint)">${esc(j.id)}</code><br>
+          <span class="mt">${esc(j.source)}${j.wiki ? " · wiki" : ""}</span><br>
+          <span class="mt">${j.status === "running" ? `<span class="spin"></span> étape : ${esc(j.stage)}`
+            : j.status === "done" ? `${nf.format(j.result.nodes)} nœuds · ${nf.format(j.result.edges)} arêtes · ${j.result.communities} communautés · ${j.result.files} fichiers${j.workspace_error ? " · workspace non créé : " + esc(j.workspace_error) : ""}`
+            : esc(j.error || "")}</span></span>
+          <span class="rt"><span class="pill">${JOB_FR[j.status] || esc(j.status)}</span></span>
+        </div>`).join("") : `<p class="empty">Aucun job pour l'instant — lancez une construction ci-dessus.</p>`;
+    } catch (e) { $("#bd-jobs").innerHTML = `<p class="empty">${esc(e.message)}</p>`; }
+  }
+
+  function inlineMd(x) { return esc(x).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>"); }
+  function miniMd(src) {
+    let html = "", inCode = false, inTable = false, inUl = false;
+    const close = () => { if (inCode) { html += "</pre>"; inCode = false; } if (inTable) { html += "</tbody></table>"; inTable = false; } if (inUl) { html += "</ul>"; inUl = false; } };
+    for (const ln of String(src).split("\n")) {
+      if (ln.startsWith("```")) { if (inCode) { html += "</pre>"; inCode = false; } else { close(); html += '<pre class="code">'; inCode = true; } continue; }
+      if (inCode) { html += esc(ln) + "\n"; continue; }
+      const t = ln.trim();
+      if (t.startsWith("|")) {
+        if (!inTable) { close(); html += '<table class="tbl"><tbody>'; inTable = true; }
+        if (/^\|[\s:|-]+$/.test(t)) continue;
+        html += "<tr>" + t.slice(1, -1).split("|").map((c) => `<td>${inlineMd(c.trim())}</td>`).join("") + "</tr>";
+        continue;
+      }
+      if (inTable) { html += "</tbody></table>"; inTable = false; }
+      const h = t.match(/^(#{1,4}) /);
+      if (h) { close(); html += `<h${h[1].length} class="md-h${h[1].length}">${inlineMd(t.replace(/^#+ /, ""))}</h${h[1].length}>`; continue; }
+      if (/^[-*] /.test(t)) { if (!inUl) { close(); html += '<ul class="md-ul">'; inUl = true; } html += `<li>${inlineMd(t.slice(2))}</li>`; continue; }
+      if (inUl) { html += "</ul>"; inUl = false; }
+      if (!t) continue;
+      close();
+      html += `<p class="md-p">${inlineMd(t)}</p>`;
+    }
+    close();
+    return html;
+  }
+
+  async function loadReport() {
+    try {
+      const r = await api("/api/report");
+      $("#rp-md").innerHTML = r.available ? miniMd(r.markdown) : `<p class="empty">${esc(r.hint || "rapport indisponible")}</p>`;
+    } catch (e) { $("#rp-md").innerHTML = `<p class="empty">${esc(e.message)}</p>`; }
+    $$("#v-report [data-exp]").forEach((b) => {
+      b.onclick = () => {
+        const tok = GStore.get(LS.token);
+        location.href = `/api/export?kind=${b.dataset.exp}&token=${encodeURIComponent(tok || "")}`;
+      };
+    });
+    $("#rp-bench").onclick = async () => {
+      $("#rp-bench-out").innerHTML = `<p class="empty"><span class="spin"></span> mesure…</p>`;
+      try {
+        const r = await api("/api/benchmark");
+        const b = r.benchmark || {};
+        $("#rp-bench-out").innerHTML = `<div class="card pad" style="margin-bottom:12px">
+          <h2>Benchmark tokens</h2>
+          <div class="sub" style="line-height:1.9">${Object.entries(b).slice(0, 10).map(([k, v]) =>
+            `${esc(k)} : <b class="num">${typeof v === "number" ? nf.format(v) : esc(JSON.stringify(v))}</b>`).join("<br>")}</div></div>`;
+      } catch (e) { $("#rp-bench-out").innerHTML = `<p class="empty">${esc(e.message)}</p>`; }
+    };
+  }
+
   // ------------------------------------------------------------ live sync
   let sse = null;
   function subscribeEvents() {
@@ -774,6 +844,17 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
     try {
       sse = new EventSource("/api/events?token=" + encodeURIComponent(tok || ""), { withCredentials: true });
     } catch { return; }
+    sse.addEventListener("build", (ev) => {
+      let d = {}; try { d = JSON.parse(ev.data); } catch { return; }
+      if (S.view === "builds") loadBuilds();
+      (d.jobs || []).forEach((j) => {
+        if (j.status === "done" && !S.seenBuilds[j.id]) {
+          S.seenBuilds[j.id] = 1;
+          toast(`Build « ${j.name} » terminé — ${nf.format((j.result || {}).nodes || 0)} nœuds`);
+          enter();
+        }
+      });
+    });
     sse.addEventListener("graph", async () => {
       toast("Graphe reconstruit — actualisation…");
       try {
@@ -903,7 +984,7 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
       fd.append("name", $("#nw-name").value || f.name.replace(/\.json$/, ""));
       $("#nw-hint").innerHTML = `<span class="spin"></span> téléversement…`;
       try {
-        const r = await fetch("/api/workspaces/upload", {
+        const r = await fetch("/api/workspaces/upload?token=" + encodeURIComponent(GStore.get(LS.token) || ""), {
           method: "POST",
           headers: { Authorization: "Bearer " + GStore.get(LS.token) },
           body: fd,
@@ -915,6 +996,40 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
         $("#nw-file").value = ""; $("#nw-file-label").textContent = "Upload graph.json…";
         await enter(); show("account");
       } catch (e) { $("#nw-hint").innerHTML = `<span style="color:var(--danger)">${esc(e.message)}</span>`; }
+    };
+    $("#bd-go").onclick = async () => {
+      const src = $("#bd-source").value.trim();
+      if (!src) return toast("Indiquez un chemin source");
+      $("#bd-hint").innerHTML = `<span class="spin"></span> lancement…`;
+      try {
+        const r = await api("/api/builds", null, { method: "POST", body: {
+          name: $("#bd-name").value.trim() || src.split("/").filter(Boolean).pop(),
+          source: src, wiki: $("#bd-wiki").checked } });
+        $("#bd-hint").textContent = `Job ${r.job.id} lancé — étapes : detect → extract → build → cluster → analyze → report → export.`;
+        loadBuilds();
+      } catch (e) { $("#bd-hint").innerHTML = `<span style="color:var(--danger)">${esc(e.message)}</span>`; }
+    };
+    $("#bu-file").onchange = () => {
+      const f = $("#bu-file").files[0];
+      $("#bu-file-label").textContent = f ? f.name : "Choisir une archive…";
+    };
+    $("#bu-go").onclick = async () => {
+      const f = $("#bu-file").files[0];
+      if (!f) return toast("Choisissez d'abord une archive");
+      const fd = new FormData();
+      fd.append("file", f);
+      fd.append("name", $("#bu-name").value || f.name.replace(/\.(zip|tar\.gz|tgz|tar)$/, ""));
+      $("#bu-hint").innerHTML = `<span class="spin"></span> téléversement…`;
+      try {
+        const tok = GStore.get(LS.token);
+        const r = await fetch("/api/builds/upload?token=" + encodeURIComponent(tok || ""), {
+          method: "POST", headers: { Authorization: "Bearer " + tok }, body: fd });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+        $("#bu-hint").textContent = `Job ${j.job.id} lancé sur l'archive décompressée.`;
+        $("#bu-file").value = ""; $("#bu-file-label").textContent = "Choisir une archive…";
+        loadBuilds();
+      } catch (e) { $("#bu-hint").innerHTML = `<span style="color:var(--danger)">${esc(e.message)}</span>`; }
     };
     bindSearch();
     bindGate();

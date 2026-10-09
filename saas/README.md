@@ -223,3 +223,17 @@ Ordered by how much they unblock the SaaS/IDE direction:
 6. **VS Code extension** — the API is extension-shaped (bearer keys, CORS open
    for webview origins, `/api/theme` to match colours): a webview reusing
    `app.js` plus an "explain symbol at cursor" command.
+
+## Builds (pipeline hébergé)
+
+`POST /api/builds` `{name, source}` ou `POST /api/builds/upload` (archive
+.zip/.tar.*) lancent le pipeline documenté par `ARCHITECTURE.md`
+(detect → extract → build → cluster → analyze → report → export) dans un
+thread serveur ; progression via événements SSE `build`. Un build terminé
+crée le workspace, avec `graph.json`, `GRAPH_REPORT.md` et wiki optionnel.
+Passe 1 uniquement (AST tree-sitter, zéro LLM). Vues app : **Constructions**
+et **Rapport & exports** (`GET /api/report`, `/api/export?kind=…`,
+`/api/benchmark`).
+
+`minigraph/` (racine du repo) est une réimplémentation pédagogique du même
+pipeline, module par module : `python -m minigraph.selfdemo <dir>`.

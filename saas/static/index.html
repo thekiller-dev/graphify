@@ -84,6 +84,12 @@
     <button data-view="godnodes">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 2.6 5.6 6.1.8-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.4l6.1-.8z"/></svg>
       <span class="lbl">Nœuds centraux</span></button>
+    <button data-view="builds">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 5.5 18 9l-8.5 8.5-3.5.5.5-3.5z"/><path d="m3 21 3-3"/><path d="M13 7 8 2M17 11l5-5"/></svg>
+      <span class="lbl">Constructions</span></button>
+    <button data-view="report">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7"/></svg>
+      <span class="lbl">Rapport &amp; exports</span></button>
 
     <div class="sect"><span class="lbl">Interroger le graphe</span></div>
     <button data-view="query">
@@ -205,6 +211,61 @@
         <div class="head"><h1>Nœuds centraux</h1>
           <p class="sub">Les concepts par lesquels tout passe. Un degré élevé ici signifie souvent « abstraction centrale » — ou hub utilitaire à découper.</p></div>
         <div class="list" id="gn-list"></div>
+      </section>
+
+      <!-- CONSTRUCTIONS -->
+      <section class="view" id="v-builds">
+        <div class="head"><h1>Constructions</h1>
+          <p class="sub">Le pipeline documenté — detect → extract → build → cluster → analyze → report → export —
+            tourne côté serveur. Passe 1 uniquement : AST tree-sitter, gratuit, local, déterministe.
+            Un build terminé devient un workspace, avec son graph.json et son GRAPH_REPORT.md.</p></div>
+        <div class="grid g2">
+          <div class="card pad">
+            <h2>Construire depuis un chemin serveur</h2>
+            <div class="fieldrow">
+              <input type="text" id="bd-name" placeholder="nom du workspace" style="flex:1">
+              <input type="text" id="bd-source" placeholder="/chemin/vers/les/sources" style="flex:1.4">
+            </div>
+            <div class="fieldrow" style="margin-top:8px">
+              <label class="chk"><input type="checkbox" id="bd-wiki"> générer aussi le wiki</label>
+              <button class="btn primary" id="bd-go" style="margin-left:auto">Lancer la construction</button>
+            </div>
+            <p class="sub" style="margin-top:8px" id="bd-hint">La source doit vivre sous la racine de données
+              ou la racine du repo — jail de chemins, comme tout le reste.</p>
+          </div>
+          <div class="card pad">
+            <h2>Téléverser des sources (.zip / .tar.gz)</h2>
+            <div class="fieldrow">
+              <label class="btn" style="cursor:pointer">
+                <input type="file" id="bu-file" accept=".zip,.tar,.gz,.tgz" style="display:none">
+                <span id="bu-file-label">Choisir une archive…</span>
+              </label>
+              <input type="text" id="bu-name" placeholder="nom (optionnel)" style="flex:1">
+              <button class="btn primary" id="bu-go">Téléverser &amp; construire</button>
+            </div>
+            <p class="sub" style="margin-top:8px" id="bu-hint">Décompression garde-fou zip-slip sous la racine
+              de données, plafonnée par votre plan. Jamais de lien symbolique suivi.</p>
+          </div>
+        </div>
+        <div class="card pad" style="margin-top:12px"><h2>Jobs</h2><div class="list" id="bd-jobs"></div></div>
+      </section>
+
+      <!-- RAPPORT & EXPORTS -->
+      <section class="view" id="v-report">
+        <div class="head"><h1>Rapport &amp; exports</h1>
+          <p class="sub">Le GRAPH_REPORT.md produit par le pipeline, et les exports documentés du graphe
+            (svg, graphml, cypher, wiki, obsidian, callflow) générés à la demande.</p></div>
+        <div class="fieldrow" style="margin-bottom:12px">
+          <button class="btn" data-exp="svg">graph.svg</button>
+          <button class="btn" data-exp="graphml">graph.graphml</button>
+          <button class="btn" data-exp="cypher">graph.cypher</button>
+          <button class="btn" data-exp="wiki">wiki (.zip)</button>
+          <button class="btn" data-exp="obsidian">obsidian (.zip)</button>
+          <button class="btn" data-exp="callflow">callflow (.html)</button>
+          <button class="btn primary" id="rp-bench" style="margin-left:auto">Benchmark tokens</button>
+        </div>
+        <div id="rp-bench-out"></div>
+        <div class="card pad"><h2>GRAPH_REPORT.md</h2><div id="rp-md" class="md"></div></div>
       </section>
 
       <!-- REQUÊTES -->

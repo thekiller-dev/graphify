@@ -43,3 +43,4 @@ paper/
 
 # saas runtime state: sqlite identity store + per-tenant graphs
 saas/data/
+minigraph-out/

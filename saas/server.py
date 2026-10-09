@@ -24,6 +24,8 @@ import hashlib
 import json
 import os
 import re
+import secrets
+import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,10 +34,11 @@ from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
+from saas import builder
 from saas import theme as themes
 from saas.auth import (
     PLANS,
@@ -102,6 +105,23 @@ def safe_graph_path(candidate: str | Path) -> Path:
         )
     if path.suffix != ".json":
         raise AuthError("graph path must be a .json file", 400)
+    return path
+
+
+def safe_source_path(candidate: str) -> Path:
+    """Jail for build *sources*: a directory under the data root or the repo cwd.
+
+    Distinct from :func:`safe_graph_path` (a file, .json) because a build eats a
+    whole tree; same fail-loud philosophy — resolved path or nothing.
+    """
+    path = Path(candidate or "").expanduser().resolve()
+    for root in (data_root(), Path.cwd().resolve()):
+        if path == root or path.is_relative_to(root):
+            break
+    else:
+        raise AuthError(f"source must live under {data_root()} or the repo root", 400)
+    if not path.is_dir():
+        raise AuthError("source must be a directory of sources", 400)
     return path
 
 
@@ -238,7 +258,7 @@ def principal(request: Request) -> Principal:
 
 # Endpoints that need a signed-in user but not a workspace — otherwise a
 # brand-new account could never create its first workspace (403 chicken-and-egg).
-_NO_WORKSPACE_NEEDED = frozenset({"/api/auth/me", "/api/workspaces"})
+_NO_WORKSPACE_NEEDED = frozenset({"/api/auth/me", "/api/workspaces", "/api/builds", "/api/builds/upload"})
 
 
 def require(request: Request, *, meter: bool = True) -> Principal:
@@ -963,29 +983,36 @@ async def api_events(request: Request) -> Response:
     deliberately cheap (one stat per workspace per tick).
     """
     p = principal(request)
-    if p.via == "none" or p.workspace is None:
+    if p.via == "none":
         return _err("authentication required", 401)
-    ws = p.workspace
+    ws = p.workspace  # may be None: a brand-new account still gets build events
 
     import asyncio as _asyncio
 
     async def stream():
         last = None
-        yield f"event: hello\ndata: {json.dumps({'workspace': ws.slug})}\n\n"
+        last_seq = builder.events_seq()
+        yield f"event: hello\ndata: {json.dumps({'workspace': ws.slug if ws else None})}\n\n"
         for _ in range(600):  # ~20 min cap; the client reconnects
-            try:
-                fp = graph_fingerprint(Path(ws.graph_path))
-            except OSError:
-                fp = None
-            if fp != last:
-                if last is not None:
-                    try:
-                        st = GRAPHS.get(ws.graph_path)
-                        payload = {"nodes": len(st.nodes), "edges": st.G.number_of_edges()}
-                    except Exception:
-                        payload = {"nodes": None, "edges": None}
-                    yield f"event: graph\ndata: {json.dumps(payload)}\n\n"
-                last = fp
+            if ws is not None:
+                try:
+                    fp = graph_fingerprint(Path(ws.graph_path))
+                except OSError:
+                    fp = None
+                if fp != last:
+                    if last is not None:
+                        try:
+                            st = GRAPHS.get(ws.graph_path)
+                            payload = {"nodes": len(st.nodes), "edges": st.G.number_of_edges()}
+                        except Exception:
+                            payload = {"nodes": None, "edges": None}
+                        yield f"event: graph\ndata: {json.dumps(payload)}\n\n"
+                    last = fp
+            seq = builder.events_seq()
+            if seq != last_seq:
+                last_seq = seq
+                jobs = builder.jobs_for(p.user.id) if p.user else []
+                yield f"event: build\ndata: {json.dumps({'jobs': jobs})}\n\n"
             await _asyncio.sleep(2)
 
     from starlette.responses import StreamingResponse
@@ -996,6 +1023,176 @@ async def api_events(request: Request) -> Response:
         headers={"cache-control": "no-cache, no-transform", "x-accel-buffering": "no"},
     )
 
+
+# ---------------------------------------------------- builds (hosted pipeline)
+
+
+def _job_json(job: dict) -> dict:
+    return {k: job.get(k) for k in (
+        "id", "name", "source", "status", "stage", "wiki", "error",
+        "workspace_error", "workspace_id", "result", "created_at", "updated_at")}
+
+
+def _ws_factory(user_id: str, name: str):
+    """Turn a finished build into a workspace — plan caps checked here so a
+    successful build over quota reports honestly instead of half-registering."""
+    def factory(job: dict, result: dict):
+        a = get_auth()
+        owned = len(a.workspaces_for(user_id))
+        cap = plan_of(_best_plan(a, user_id))["max_workspaces"]
+        if owned >= cap:
+            raise LimitExceeded(f"plan allows {cap} workspaces and you have {owned}.")
+        store = GRAPHS.preload(result["graph"])
+        _check_nodes(store, _best_plan(a, user_id))
+        return a.create_workspace(user_id, name, result["graph"]).id
+    return factory
+
+
+@_guard
+async def api_builds(request: Request) -> JSONResponse:
+    """GET: this user's jobs. POST: {name, source[, wiki]} starts a pipeline run
+    on a server-side source directory (jailed, see safe_source_path)."""
+    p = principal(request)
+    if p.via == "none":
+        raise AuthError("authentication required", 401)
+    if request.method == "GET" or p.user is None:
+        jobs = builder.jobs_for(p.user.id) if p.user else []
+        return JSONResponse({"ok": True, "jobs": [_job_json(j) for j in jobs]})
+    body = await request.json()
+    name = (body.get("name") or "").strip() or "build"
+    source = safe_source_path(body.get("source") or "")
+    job = builder.start_build(
+        owner=p.user.id, name=name, source=source, wiki=bool(body.get("wiki")),
+        workspace_factory=_ws_factory(p.user.id, name),
+        out_root=data_root() / "builds")
+    return JSONResponse({"ok": True, "job": _job_json(job)})
+
+
+@_guard
+async def api_builds_upload(request: Request) -> JSONResponse:
+    """Self-serve source upload: .zip/.tar.* unpacked into the data-root jail
+    (zip-slip guarded, plan-capped), then the pipeline runs on the unpacked tree."""
+    p = principal(request)
+    if p.via == "none" or p.user is None:
+        raise AuthError("authentication required", 401)
+    a = get_auth()
+    cap_bytes = int(plan_of(_best_plan(a, p.user.id))["max_upload_mb"]) * 1024 * 1024
+    form = await request.form()
+    upload = form.get("file")
+    if upload is None or not hasattr(upload, "read"):
+        raise AuthError("multipart field 'file' is required", 400)
+    raw = await upload.read()
+    if len(raw) > cap_bytes:
+        raise LimitExceeded(f"plan caps uploads at {cap_bytes // 1048576} MB")
+    name = (form.get("name") or "").strip() or Path(upload.filename or "source").stem
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40] or "source"
+    dest = data_root() / "sources" / f"{slug}-{secrets.token_hex(4)}"
+    tmp = data_root() / "tmp"
+    tmp.mkdir(parents=True, exist_ok=True)
+    archive = tmp / f"{secrets.token_hex(8)}.bin"
+    archive.write_bytes(raw)
+    try:
+        builder.unpack_archive(archive, dest, cap_bytes)
+    finally:
+        archive.unlink(missing_ok=True)
+    job = builder.start_build(
+        owner=p.user.id, name=name, source=dest, wiki=form.get("wiki") == "1",
+        workspace_factory=_ws_factory(p.user.id, name),
+        out_root=data_root() / "builds")
+    return JSONResponse({"ok": True, "job": _job_json(job)})
+
+
+# --------------------------------------------- report / exports / benchmark
+
+
+def _ws_communities(store: GraphStore) -> dict[int, list[str]]:
+    """Communities straight from the stored node attributes — no re-clustering:
+    graph.json already carries them (to_json wrote them at build time)."""
+    out: dict[int, list[str]] = {}
+    for nid, d in store.nodes.items():
+        out.setdefault(d.get("community") or 0, []).append(nid)
+    return out
+
+
+@_guard
+async def api_report(request: Request) -> JSONResponse:
+    p = require(request, meter=False)
+    assert p.workspace is not None
+    rp = Path(p.workspace.graph_path).resolve().parent / "GRAPH_REPORT.md"
+    if not rp.exists():
+        return JSONResponse({
+            "ok": True, "available": False, "markdown": "",
+            "hint": "Ce graphe n'a pas de rapport : lancez une construction "
+                    "(vue Constructions) ou régénérez avec `graphify cluster-only`."})
+    return JSONResponse({"ok": True, "available": True,
+                         "markdown": rp.read_text(encoding="utf-8")})
+
+
+@_guard
+async def api_export(request: Request) -> Response:
+    """On-demand documented exports: svg, graphml, cypher, wiki (zip),
+    obsidian (zip), callflow (html). Generated in the workspace's own folder."""
+    p = require(request, meter=False)
+    assert p.workspace is not None
+    kind = (request.query_params.get("kind") or "svg").lower()
+    base = Path(p.workspace.graph_path).resolve().parent
+    outdir = base / "exports"
+    outdir.mkdir(parents=True, exist_ok=True)
+    store = p.store
+    G = store.G
+    communities = _ws_communities(store)
+    from graphify import export as gexport
+
+    try:
+        return _do_export(kind, base, store, G, communities, gexport)
+    except ImportError as exc:
+        raise AuthError(str(exc), 400)
+
+
+def _do_export(kind: str, base: Path, store: GraphStore, G, communities, gexport) -> Response:
+    outdir = base / "exports"
+    outdir.mkdir(parents=True, exist_ok=True)
+    if kind == "svg":
+        f = outdir / "graph.svg"
+        gexport.to_svg(G, communities, str(f))
+    elif kind == "graphml":
+        f = outdir / "graph.graphml"
+        gexport.to_graphml(G, communities, str(f))
+    elif kind == "cypher":
+        f = outdir / "graph.cypher"
+        gexport.to_cypher(G, str(f))
+    elif kind in ("wiki", "obsidian"):
+        d = outdir / kind
+        if kind == "wiki":
+            from graphify.wiki import to_wiki
+            to_wiki(G, communities, d)
+        else:
+            gexport.to_obsidian(G, communities, str(d))
+        shutil.make_archive(str(d), "zip", str(d))
+        f = Path(str(d) + ".zip")
+    elif kind == "callflow":
+        from graphify.callflow_html import write_callflow_html
+        f = outdir / "callflow.html"
+        report = base / "GRAPH_REPORT.md"
+        write_callflow_html(
+            graph=str(base / "graph.json"),
+            report=str(report) if report.exists() else None,
+            output=str(f))
+    else:
+        raise AuthError("export inconnu : svg, graphml, cypher, wiki, obsidian, callflow", 400)
+    return FileResponse(f, filename=f.name)
+
+
+@_guard
+async def api_benchmark(request: Request) -> JSONResponse:
+    p = require(request, meter=False)
+    assert p.workspace is not None
+    from graphify.benchmark import run_benchmark
+    try:
+        result = run_benchmark(str(Path(p.workspace.graph_path).resolve()))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+    return JSONResponse({"ok": True, "benchmark": result})
 
 
 # ---------------------------------------------------------------------- mcp
@@ -1110,6 +1307,11 @@ def build_app(graph_path: str | None = None, *, with_mcp: bool = True) -> Starle
         Route("/api/keys", api_keys, methods=["GET", "POST"]),
         Route("/api/keys/{key_id}", api_key_revoke, methods=["DELETE"]),
         Route("/api/workspaces/upload", api_upload, methods=["POST"]),
+        Route("/api/builds", api_builds, methods=["GET", "POST"]),
+        Route("/api/builds/upload", api_builds_upload, methods=["POST"]),
+        Route("/api/report", api_report),
+        Route("/api/export", api_export),
+        Route("/api/benchmark", api_benchmark),
         Route("/api/members", api_members, methods=["GET"]),
         Route("/api/members/{user_id}", api_members, methods=["DELETE"]),
         Route("/api/invites", api_invites, methods=["GET", "POST"]),
