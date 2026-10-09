@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en" data-theme="__THEME__">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>graphify — turn any codebase into a queryable knowledge graph</title>
+<meta name="description" content="Type /graphify in your AI coding assistant and it maps your entire project — code, docs, PDFs, images, videos — into a knowledge graph you can query instead of grepping.">
+<link rel="preconnect" href="https://api.fontshare.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/static/fonts.css">
+<link rel="stylesheet" href="/static/site.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='8' r='4' fill='%234F46E5'/%3E%3Ccircle cx='7' cy='23' r='4' fill='%230891B2'/%3E%3Ccircle cx='25' cy='23' r='4' fill='%23059669'/%3E%3Cpath d='M16 8 7 23M16 8l9 15M7 23h18' stroke='%234F46E5' stroke-width='1.6' fill='none'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<!-- ============================================================== nav -->
+<header class="l-nav">
+  <div class="wrap in">
+    <a class="brand" href="#top">
+      <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="7" r="4.2" fill="var(--accent)"/>
+        <circle cx="6.5" cy="23.5" r="4.2" fill="var(--accent-2)"/>
+        <circle cx="25.5" cy="23.5" r="4.2" fill="var(--ok)"/>
+        <path d="M16 7 6.5 23.5M16 7l9.5 16.5M6.5 23.5h19" stroke="var(--accent)" stroke-width="1.7" fill="none" opacity=".7"/>
+      </svg>
+      graphify <span class="pill">v0.9.77</span>
+    </a>
+    <nav class="l-links">
+      <a href="#product">Product</a>
+      <a href="#benchmarks">Benchmarks</a>
+      <a href="#how">How it works</a>
+      <a href="#files">Files</a>
+      <a href="#install">Install</a>
+      <a href="#platform">Platform</a>
+    </nav>
+    <div class="l-right">
+      <div id="themes" title="Theme"></div>
+      <a class="btn ghost" href="/login">Sign in</a>
+      <a class="btn primary" href="/app">Open workspace</a>
+    </div>
+  </div>
+</header>
+
+<!-- ============================================================= hero -->
+<section class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="badges">
+        <span class="badge hot">Y Combinator S26</span>
+        <span class="badge">Apache-2.0 + MIT</span>
+        <span class="badge">Python 3.10+</span>
+        <span class="badge">18+ AI assistants</span>
+      </div>
+      <h1>Your codebase as a <em>queryable graph</em>.</h1>
+      <p class="lede sub">Type <code>/graphify</code> in your AI coding assistant and it maps your entire
+        project — code, docs, PDFs, images, videos — into a knowledge graph you can
+        <strong>query instead of grepping</strong> through files.</p>
+      <div class="cta-row">
+        <a class="btn primary lg" href="/login">Start free — 14 days</a>
+        <a class="btn lg" href="#install">Install the CLI</a>
+      </div>
+      <p class="note">Code maps for free, fully local: tree-sitter AST, deterministic, nothing leaves your
+        machine. Docs, PDFs, images and video use your assistant's model for a semantic pass.</p>
+    </div>
+    <div>
+      <div class="term">
+        <div class="bar"><i></i><i></i><i></i><span>~/project — /graphify .</span></div>
+<pre><span class="c">$ /graphify .</span>
+<span class="g">✓</span> 571 code files · AST extraction · <span class="y">0 LLM credits</span>
+<span class="g">✓</span> wrote graphify-out/graph.json
+  <span class="w">15,647 nodes · 34,603 edges · 729 communities</span>
+<span class="g">✓</span> graph.html · GRAPH_REPORT.md · graph.json
+
+<span class="c">$ graphify path "FastAPI" "ModelField"</span>
+<span class="b">Shortest path (3 hops):</span>
+  FastAPI --uses--&gt; DefaultPlaceholder
+          &lt;--references-- get_request_handler()
+          --references--&gt; ModelField</pre>
+      </div>
+      <div id="hero-canvas-wrap" style="margin-top:14px">
+        <canvas id="hero-canvas"></canvas>
+        <span class="cap">live: the force layout you get in the workspace — no CDN, no build step</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================================================= product -->
+<section class="band" id="product">
+  <div class="wrap">
+    <span class="eyebrow">What it does</span>
+    <h2>Not a vector index. A graph you traverse.</h2>
+    <p class="lead">No embeddings, no vector store. Ask a question, trace the path between two things,
+      or explain one concept — every edge is explained and tagged with how it was found.</p>
+    <div class="cards">
+      <div class="card"><div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 2.6 5.6 6.1.8-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.4l6.1-.8z"/></svg></div>
+        <h3>God nodes</h3><p>The most-connected concepts, so you see what everything flows through — and which hubs deserve a refactor.</p></div>
+      <div class="card"><div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/><path d="M10 7h4a3 3 0 0 1 3 3v4"/></svg></div>
+        <h3>Communities</h3><p>The graph split into subsystems with Leiden clustering, labelled without an LLM.</p></div>
+      <div class="card"><div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6 4 12l5 6M15 6l5 6-5 6"/></svg></div>
+        <h3>Cross-file links</h3><p><code>calls</code> / <code>imports</code> / <code>inherits</code> / <code>mixes_in</code> resolved across ~40 languages via tree-sitter AST.</p></div>
+      <div class="card"><div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></div>
+        <h3>Query, path, explain</h3><p>Ask a question, trace how two things connect, or explain one concept — all against <code>graph.json</code>.</p></div>
+      <div class="card"><div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7"/></svg></div>
+        <h3>Rationale + doc refs</h3><p><code># NOTE:</code> / <code># WHY:</code> comments and ADR/RFC citations become first-class nodes linked to the code.</p></div>
+      <div class="card"><div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></svg></div>
+        <h3>Beyond code</h3><p>Docs, PDFs, images, video and audio all map into the same graph, transcribed and extracted for you.</p></div>
+      <div class="card"><div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg></div>
+        <h3>Local-first</h3><p>Code is parsed locally with tree-sitter — no LLM, nothing leaves your machine. Only the semantic pass calls a backend, and only if you configure one.</p><span class="tag">0 CREDITS ON CODE</span></div>
+      <div class="card"><div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg></div>
+        <h3>Every edge explained</h3><p><code>EXTRACTED</code> = explicit in the source, <code>INFERRED</code> = resolved by graphify, <code>AMBIGUOUS</code> = flagged for review.</p></div>
+      <div class="card"><div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg></div>
+        <h3>SHA-256 cache</h3><p>Every file is fingerprinted by content hash. Re-runs skip unchanged files — only new or modified ones are re-extracted.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ====================================================== benchmarks -->
+<section class="band" id="benchmarks">
+  <div class="wrap">
+    <span class="eyebrow">Benchmarks</span>
+    <h2>Scored blind, against a second judge.</h2>
+    <p class="lead">Every system ran on the same harness with the same model and budgets, scored by a judge
+      blind-validated against a second judge (90.6% agreement, Cohen's κ 0.81).</p>
+    <table class="tbl">
+      <thead><tr><th>Benchmark</th><th>Metric</th><th>graphify</th><th>Field</th></tr></thead>
+      <tbody>
+        <tr><td>LOCOMO (n=300)</td><td>recall@10</td><td class="win">0.497</td><td>mem0 0.048 · supermemory 0.149</td></tr>
+        <tr><td>LOCOMO (n=300)</td><td>QA accuracy</td><td>45.3%</td><td>supermemory 49.7% · mem0 27.3%</td></tr>
+        <tr><td>LongMemEval-S (n=50)</td><td>QA accuracy</td><td class="win">76%</td><td>tied with dense RAG</td></tr>
+        <tr><td>ERPNext cross-tool (n=6)</td><td>key-fact coverage</td><td class="win">82.0%</td><td>grep/read baseline 70.8%</td></tr>
+        <tr><td>Graph build</td><td>LLM credits</td><td class="win">0</td><td>per-token for most systems</td></tr>
+      </tbody>
+    </table>
+    <div class="cards c4" style="margin-top:26px">
+      <div class="card"><h3>71.5×</h3><p>fewer tokens per query on a 52-file mixed corpus (Karpathy repos + 5 papers + 4 images) versus reading raw files.</p></div>
+      <div class="card"><h3>5.4×</h3><p>reduction on a 4-file corpus (graphify source + the Transformer paper).</p></div>
+      <div class="card"><h3>1.66×</h3><p>faster AST extraction with <code>ProcessPoolExecutor</code> on 84 code files — real multiprocessing past the GIL.</p></div>
+      <div class="card"><h3>26s</h3><p>to map this very repository: 571 code files → 15,647 nodes / 34,603 edges, entirely local.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================== how it works -->
+<section class="band" id="how">
+  <div class="wrap">
+    <span class="eyebrow">How it works</span>
+    <h2>Three passes, one graph.</h2>
+    <div class="steps">
+      <div class="step"><h3>Code structure — free</h3>
+        <p>Tree-sitter parses classes, functions, imports, call graphs and inline comments. Local, deterministic,
+          no LLM. SQL gets special treatment: tables, views, foreign keys and JOINs extracted deterministically.
+          A code-only corpus never touches Pass 3.</p></div>
+      <div class="step"><h3>Video &amp; audio — local</h3>
+        <p>Transcribed with faster-whisper, with the prompt seeded by your top god nodes so the transcript stays
+          on-domain. Transcripts are cached; re-runs skip processed files.</p></div>
+      <div class="step"><h3>Docs, papers, images — semantic</h3>
+        <p>Parallel subagents read batches and emit JSON fragments — nodes, edges, group relationships — merged
+          into one graph. This is the only pass that spends tokens, and only if you configure a backend.</p></div>
+    </div>
+    <div class="split">
+      <div>
+        <h3 style="font-size:18px">Communities without embeddings</h3>
+        <p class="sub" style="margin-top:10px">Communities come from the
+          <a href="https://www.nature.com/articles/s41598-019-41695-z">Leiden algorithm</a> — nodes grouped by edge
+          density. The semantic similarity edges already in the graph shape the clusters directly: the structure
+          <em>is</em> the similarity signal. No embedding step, no vector database.</p>
+        <h3 style="font-size:18px;margin-top:24px">Confidence you can audit</h3>
+        <table class="tbl" style="margin-top:12px">
+          <tbody>
+            <tr><td><code>EXTRACTED</code></td><td>explicit in the source — an import, a direct call. Confidence 1.0.</td></tr>
+            <tr><td><code>INFERRED</code></td><td>deduced by resolution, on a discrete rubric: 0.95 near-certain → 0.55 speculative.</td></tr>
+            <tr><td><code>AMBIGUOUS</code></td><td>uncertain — flagged in GRAPH_REPORT.md for human review.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="term">
+        <div class="bar"><i></i><i></i><i></i><span>graphify explain "APIRouter"</span></div>
+<pre><span class="w">Node: APIRouter</span>
+  Source:    routing.py L2210
+  Community: 2
+  Degree:    47
+
+Connections (47):
+  --&gt; RequestValidationError  <span class="y">[uses] [INFERRED]</span>
+  --&gt; Dependant               <span class="y">[uses] [INFERRED]</span>
+  --&gt; .get()                  <span class="g">[method] [EXTRACTED]</span>
+  &lt;-- __init__.py             <span class="g">[imports] [EXTRACTED]</span>
+  …</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================== files -->
+<section class="band" id="files">
+  <div class="wrap">
+    <span class="eyebrow">Corpus</span>
+    <h2>What it handles.</h2>
+    <table class="tbl">
+      <thead><tr><th>Type</th><th>Extensions &amp; notes</th></tr></thead>
+      <tbody>
+        <tr><td>Code — 37 tree-sitter grammars</td><td><code>.py .ts .tsx .js .go .rs .java .c .cpp .cu .metal .rb .cs .kt .scala .php .swift .lua .zig .ps1 .ex .m .ml .jl .vue .svelte .astro .groovy .dart .v .sv .sql .f90 .pas .sh .json</code> and more</td></tr>
+        <tr><td>Salesforce Apex</td><td><code>.cls .trigger</code> — classes, interfaces, enums, triggers, SOQL/DML edges</td></tr>
+        <tr><td>Infra &amp; niche</td><td>Terraform/HCL, OCaml, Common Lisp, Robot Framework, VB.NET, Pascal, Solidity, Erlang, R, DM — via extras</td></tr>
+        <tr><td>Manifests &amp; MCP configs</td><td><code>pyproject.toml go.mod pom.xml apm.yml</code>, <code>mcp.json</code> — one canonical package node per package</td></tr>
+        <tr><td>Docs</td><td><code>.md .mdx .qmd .html .txt .rst .yaml</code> — markdown links and <code>[[wikilinks]]</code> become <code>references</code> edges</td></tr>
+        <tr><td>Office &amp; Google</td><td><code>.docx .xlsx</code> (office extra) · <code>.gdoc .gsheet .gslides</code> (opt-in, <code>gws</code> auth)</td></tr>
+        <tr><td>Papers &amp; images</td><td><code>.pdf</code> · <code>.png .jpg .webp .gif</code></td></tr>
+        <tr><td>Video, audio, URLs</td><td><code>.mp4 .mov .mp3 .wav</code> … and any YouTube/video URL (video extra)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ========================================================= install -->
+<section class="band" id="install">
+  <div class="wrap">
+    <span class="eyebrow">Install</span>
+    <h2>Thirty seconds to your first graph.</h2>
+    <div class="split">
+      <div class="code"><span class="c"># install the CLI</span>
+uv tool install graphifyy      <span class="c"># or: pipx install graphifyy</span>
+
+<span class="c"># register the skill with your assistant</span>
+graphify install
+
+<span class="c"># then, inside your assistant:</span>
+<span class="k">/graphify .</span>
+
+<span class="c"># headless, for CI — no IDE needed</span>
+graphify extract ./docs --backend gemini</div>
+      <div>
+        <p class="sub">The same skill body is generated per host from
+          <code>tools/skillgen/</code>, and CI fails if a generated file drifts — so every platform gets exactly
+          the coverage the repo promises.</p>
+        <div class="chips">
+          <span class="chip on">Claude Code</span><span class="chip on">Cursor</span><span class="chip on">Codex</span>
+          <span class="chip on">GitHub Copilot</span><span class="chip on">Gemini CLI</span><span class="chip">CodeBuddy</span>
+          <span class="chip">OpenCode</span><span class="chip">Kilo</span><span class="chip">Aider</span><span class="chip">Amp</span>
+          <span class="chip">OpenClaw</span><span class="chip">Factory Droid</span><span class="chip">Trae</span><span class="chip">Hermes</span>
+          <span class="chip">Kiro</span><span class="chip">Pi</span><span class="chip">Devin CLI</span><span class="chip">Google Antigravity</span>
+        </div>
+        <h3 style="font-size:18px;margin-top:28px">Common commands</h3>
+        <div class="code" style="margin-top:12px">graphify query "what connects auth to the db?"
+graphify path "UserService" "DatabasePool"
+graphify explain "RateLimiter"
+graphify add https://arxiv.org/abs/1706.03762
+graphify . --watch            <span class="c"># auto-sync on change</span>
+graphify . --obsidian         <span class="c"># vault export</span>
+graphify . --neo4j-push bolt://…  <span class="c"># push to Neo4j</span>
+graphify prs --triage         <span class="c"># AI-ranked review queue</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================== platform -->
+<section class="band" id="platform">
+  <div class="wrap">
+    <span class="eyebrow">The hosted product</span>
+    <h2>The same graph, as a workspace your whole team can open.</h2>
+    <p class="lead">This deployment ships the hosted surface: one origin serving the web workspace, a JSON API
+      for your own tooling, and an MCP endpoint your IDE already speaks — scoped per workspace, gated per key.</p>
+    <div class="cards">
+      <div class="card"><div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="m9 9-2 3 2 3M15 9l2 3-2 3"/></svg></div>
+        <h3>IDE &amp; agent ready</h3><p>MCP Streamable HTTP on <code>/mcp</code> with 10 tools — <code>query_graph</code>, <code>shortest_path</code>, <code>god_nodes</code>… Point Cursor, VS Code, Claude Code or Codex at it with one JSON snippet.</p></div>
+      <div class="card"><div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="15" r="4"/><path d="m11 12 8-8 2 2-2 2 2 2-2.5 2.5L16 10l-2 2"/></svg></div>
+        <h3>Workspaces &amp; keys</h3><p>One graph per workspace, members with roles, and <code>gf_…</code> API keys stored hashed, shown once, revocable. A key can never cross tenants — asking it to is a 403.</p></div>
+      <div class="card"><div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10"/><path d="M2 17h20v3H2z"/></svg></div>
+        <h3>Scales past one laptop</h3><p>Parsed graphs live in a bounded LRU invalidated by content fingerprint, so 50 tenants don't mean 50 graphs in RAM and a <code>graphify update</code> lands without a restart.</p></div>
+      <div class="card"><div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg></div>
+        <h3>Themed end to end</h3><p>One token file drives the web app, the canvas and — soon — the exported <code>graph.html</code> and your extension's webview. Re-brand is one edit.</p></div>
+    </div>
+    <div class="cta-band">
+      <h2>Stop grepping. Start traversing.</h2>
+      <p>Open the live workspace — it is already mapped on this repository: 15,647 nodes, 34,603 edges,
+        729 communities, extracted in 26 seconds with zero LLM credits.</p>
+      <div class="row">
+        <a class="btn primary lg" href="/login">Sign in</a>
+        <a class="btn lg" href="/app">Explore the demo workspace</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================================================== footer -->
+<footer>
+  <div class="wrap">
+    <div class="f-grid">
+      <div>
+        <a class="brand" href="#top">
+          <svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
+            <circle cx="16" cy="7" r="4.2" fill="var(--accent)"/>
+            <circle cx="6.5" cy="23.5" r="4.2" fill="var(--accent-2)"/>
+            <circle cx="25.5" cy="23.5" r="4.2" fill="var(--ok)"/>
+            <path d="M16 7 6.5 23.5M16 7l9.5 16.5M6.5 23.5h19" stroke="var(--accent)" stroke-width="1.7" fill="none" opacity=".7"/>
+          </svg>
+          graphify
+        </a>
+        <p class="sub" style="font-size:13px;margin-top:12px;max-width:34ch">A knowledge graph for your codebase,
+          built by the library and served by this workspace. Local-first by design.</p>
+      </div>
+      <div><h4>Product</h4>
+        <a href="#product">Capabilities</a><a href="#benchmarks">Benchmarks</a><a href="#how">How it works</a>
+        <a href="#platform">Hosted platform</a><a href="/app">Live workspace</a></div>
+      <div><h4>Developers</h4>
+        <a href="#install">Install</a><a href="#files">Supported files</a>
+        <a href="/login">API &amp; MCP keys</a><a href="https://docs.graphify.com">Documentation</a>
+        <a href="https://github.com/Graphify-Labs/graphify">Source (v8)</a></div>
+      <div><h4>Trust</h4>
+        <a href="#how">Confidence tags</a><a href="https://github.com/Graphify-Labs/graphify/blob/v8/SECURITY.md">Security model</a>
+        <a href="https://github.com/Graphify-Labs/graphify/blob/v8/LICENSE">Apache-2.0</a>
+        <a href="https://github.com/Graphify-Labs/graphify/blob/v8/CODE_OF_CONDUCT.md">Code of conduct</a></div>
+    </div>
+    <div class="f-note">
+      <span>© 2026 Graphify Labs · YC S26</span>
+      <span>README translated in 30+ languages</span>
+      <span>Set in Sora &amp; Satoshi</span>
+      <span>v0.9.77</span>
+    </div>
+  </div>
+</footer>
+
+<script src="/static/site.js"></script>
+</body>
+</html>

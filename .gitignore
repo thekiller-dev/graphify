@@ -40,3 +40,6 @@ paper/
 
 # macOS Finder metadata
 .DS_Store
+
+# saas runtime state: sqlite identity store + per-tenant graphs
+saas/data/

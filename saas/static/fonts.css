@@ -1,0 +1,62 @@
+/* Type system: Sora for display, Satoshi for text.
+
+   Sora is self-hosted (latin woff2 vendored from @fontsource, SIL OFL) so
+   titles render with no network at all — including inside an IDE webview.
+   Satoshi is distributed exclusively by Fontshare (ITF Free Font License) and
+   is not on any registry this build can reach, so it is linked from its
+   official source at runtime; the stack below degrades gracefully to Sora and
+   then to the platform UI face when it is unreachable. */
+
+@font-face {
+  font-family: "Sora";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("/static/fonts/sora-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Sora";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("/static/fonts/sora-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Sora";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url("/static/fonts/sora-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Sora";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url("/static/fonts/sora-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Sora";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 800;
+  src: url("/static/fonts/sora-latin-800-normal.woff2") format("woff2");
+}
+
+:root {
+  --font-display: "Sora", "Satoshi", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body: "Satoshi", "Sora", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body { font-family: var(--font-body); }
+
+h1, h2, h3, h4,
+.display,
+#brand, .brand, .gate-title,
+.stat .v, .num-big,
+.l-nav .cta, .btn.primary,
+.section-eyebrow {
+  font-family: var(--font-display);
+}
+
+h1, h2, h3 { letter-spacing: -0.02em; }
