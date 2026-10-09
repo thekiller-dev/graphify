@@ -11,10 +11,10 @@
     let data = null;
     try { data = await (await fetch("/api/theme")).json(); } catch { return; }
     const mounts = ["#themes", "#themes-m"].map((s) => $(s)).filter(Boolean);
-    const saved = localStorage.getItem(LS_THEME);
+    const saved = GStore.get(LS_THEME);
     const apply = (id) => {
       document.documentElement.dataset.theme = id;
-      localStorage.setItem(LS_THEME, id);
+      GStore.set(LS_THEME, id);
       mounts.forEach((m) => [...m.children].forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.id === id))));
       paintCanvas();
     };
@@ -131,6 +131,33 @@
     $("#tab-signup").onclick = () => setMode("signup");
     setMode(mode);
 
+    // One-click demo: the deployment tells us whether a seeded account exists,
+    // never the credentials - the button just asks the server to log itself in.
+    fetch("/api/health").then((r) => r.json()).then((h) => {
+      if (!h.demo_login) return;
+      const wrap = document.createElement("div");
+      wrap.style.margin = "14px 0 4px";
+      wrap.innerHTML = `<button class="btn wide" type="button" id="au-demo"
+        style="border-style:dashed">Enter with the demo account</button>`;
+      form.before(wrap);
+      $("#au-demo").onclick = async (e) => {
+        const b = e.currentTarget; b.disabled = true; b.innerHTML = `<span class="spin"></span>`;
+        try {
+          const r = await fetch("/api/auth/demo", { method: "POST" });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || "HTTP " + r.status);
+          GStore.set(LS_TOKEN, d.token);
+          const first = (d.workspaces || [])[0];
+          if (first) GStore.set(LS_WS, first.id);
+          const next = new URLSearchParams(location.search).get("next");
+          location.href = next && next.startsWith("/") && !next.startsWith("//") ? next : "/app";
+        } catch (ex) {
+          $("#au-err").textContent = ex.message;
+          b.disabled = false; b.textContent = "Enter with the demo account";
+        }
+      };
+    }).catch(() => {});
+
     form.onsubmit = async (e) => {
       e.preventDefault();
       const err = $("#au-err"); err.textContent = "";
@@ -148,9 +175,9 @@
         });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.error || "HTTP " + r.status);
-        localStorage.setItem(LS_TOKEN, d.token);
+        GStore.set(LS_TOKEN, d.token);
         const first = (d.workspaces || [])[0];
-        if (first) localStorage.setItem(LS_WS, first.id); else localStorage.removeItem(LS_WS);
+        if (first) GStore.set(LS_WS, first.id); else GStore.del(LS_WS);
         const next = new URLSearchParams(location.search).get("next");
         location.href = next && next.startsWith("/") && !next.startsWith("//") ? next : "/app";
       } catch (ex) {
@@ -162,9 +189,14 @@
 
   // ------------------------------------------------------------------ boot
   // Already signed in and landing here? Go straight to the workspace.
-  if (localStorage.getItem("graphify.token") && location.pathname !== "/signup") {
-    const back = new URLSearchParams(location.search).get("next");
-    if (location.pathname === "/login") location.replace(back && back.startsWith("/") ? back : "/app");
+  if (GStore.get("graphify.token") && location.pathname !== "/signup") {
+    const qs = new URLSearchParams(location.search);
+    // bounce=1 means /app just rejected this token: show the form instead of
+    // redirecting straight back into the same rejection.
+    if (!qs.has("bounce") && location.pathname === "/login") {
+      const back = qs.get("next");
+      location.replace(back && back.startsWith("/") && !back.startsWith("//") ? back : "/app");
+    }
   }
   initTheme();
   initCanvas();

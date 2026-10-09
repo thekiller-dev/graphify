@@ -56,6 +56,12 @@ STATIC_DIR = Path(__file__).parent / "static"
 # the endpoint is unavailable rather than hand an IDE a dead URL.
 MCP_AVAILABLE = False
 
+# Set by --demo: enables POST /api/auth/demo (one-click login as the seeded
+# account) and advertises it on /api/health so the login page can offer the
+# button. Off by default: a production deploy has no demo account to log into.
+DEMO_LOGIN = False
+_DEMO_CREDS: tuple[str, str] | None = None
+
 # Set by --bootstrap-graph: the one path outside the data root a workspace may
 # use, so a local checkout can be served without copying 19 MB around.
 _BOOTSTRAP_GRAPH: str | None = None
@@ -95,6 +101,36 @@ def safe_graph_path(candidate: str | Path) -> Path:
     if path.suffix != ".json":
         raise AuthError("graph path must be a .json file", 400)
     return path
+
+
+class AccessLogMiddleware:
+    """Log what matters: every auth attempt and every 4xx/5xx.
+
+    uvicorn runs at warning level here, which left a failed browser login
+    completely invisible server-side. One line per interesting request keeps
+    the log readable and the debugging possible.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        path = scope.get("path", "")
+        interesting = path.startswith("/api/auth") or path == "/mcp"
+        status_box = {}
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                status_box["s"] = message.get("status", 0)
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+        status = status_box.get("s", 0)
+        if interesting or status >= 400:
+            print(f'[http] {scope.get("method")} {path} -> {status}', flush=True)
 
 
 class RevalidateMiddleware:
@@ -320,10 +356,35 @@ async def api_health(request: Request) -> JSONResponse:
             "ok": True,
             "service": "graphify-app",
             "mcp": MCP_AVAILABLE,
+            "demo_login": DEMO_LOGIN,
+            "storage_note": None,
             "cached_graphs": len(GRAPHS.snapshot()),
             "time": int(time.time()),
         }
     )
+
+
+async def api_demo_login(request: Request) -> JSONResponse:
+    """One-click login as the seeded demo account. Only exists when the server
+    was started with --demo; otherwise 404, so the route is not even a probe
+    target in production."""
+    if not DEMO_LOGIN or _DEMO_CREDS is None:
+        return _err("demo login is not enabled on this deployment", 404)
+    a = get_auth()
+    try:
+        user, token = a.login(_DEMO_CREDS[0], _DEMO_CREDS[1])
+    except AuthError as e:
+        return _err(e.message, e.status)
+    resp = JSONResponse(
+        {
+            "ok": True,
+            "token": token,
+            "user": {"id": user.id, "email": user.email, "name": user.name},
+            "workspaces": [_ws_json(w) for w in a.workspaces_for(user.id)],
+        }
+    )
+    _set_cookie(resp, token)
+    return resp
 
 
 # --------------------------------------------------------------------- auth
@@ -1003,6 +1064,7 @@ def build_app(graph_path: str | None = None, *, with_mcp: bool = True) -> Starle
         Route("/api/auth/signup", api_signup, methods=["POST"]),
         Route("/api/auth/login", api_login, methods=["POST"]),
         Route("/api/auth/logout", api_logout, methods=["POST"]),
+        Route("/api/auth/demo", api_demo_login, methods=["POST"]),
         Route("/api/auth/me", api_me),
         Route("/api/workspaces", api_workspaces, methods=["GET", "POST"]),
         Route("/api/keys", api_keys, methods=["GET", "POST"]),
@@ -1061,6 +1123,7 @@ def build_app(graph_path: str | None = None, *, with_mcp: bool = True) -> Starle
         )
     ]
     middleware.insert(0, Middleware(RevalidateMiddleware))
+    middleware.insert(0, Middleware(AccessLogMiddleware))
     return Starlette(routes=routes, middleware=middleware, lifespan=lifespan)
 
 
@@ -1095,6 +1158,7 @@ def main(argv: list[str] | None = None) -> None:
 
     a = get_auth()
     demo: tuple[str, str] | None = None
+    global DEMO_LOGIN, _DEMO_CREDS
     if _BOOTSTRAP_GRAPH and Path(_BOOTSTRAP_GRAPH).exists():
         if args.demo or a.user_count() == 0:
             demo = _seed_demo(a, _BOOTSTRAP_GRAPH)
@@ -1111,7 +1175,9 @@ def main(argv: list[str] | None = None) -> None:
     if MCP_AVAILABLE:
         print(f"[graphify-app] MCP endpoint (Streamable HTTP, api-key auth): {base}/mcp", flush=True)
     if demo:
-        print(f"[graphify-app] demo login: {demo[0]} / {demo[1]}", flush=True)
+        DEMO_LOGIN = True
+        _DEMO_CREDS = demo
+        print(f"[graphify-app] demo login: {demo[0]} / {demo[1]} (one-click enabled)", flush=True)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 
 

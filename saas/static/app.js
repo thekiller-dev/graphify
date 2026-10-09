@@ -20,7 +20,7 @@
     const u = new URL(path, location.origin);
     if (params) Object.entries(params).forEach(([k, v]) => v != null && v !== "" && u.searchParams.set(k, v));
     const headers = Object.assign({}, opts.headers);
-    const token = localStorage.getItem(LS.token);
+    const token = GStore.get(LS.token);
     if (token) headers["Authorization"] = "Bearer " + token;
     if (S.ws) headers["X-Workspace"] = S.ws;
     if (opts.body !== undefined) headers["Content-Type"] = "application/json";
@@ -39,7 +39,7 @@
     document.documentElement.dataset.theme = id;
     const p = S.theme.themes.find((t) => t.id === id) || S.theme.themes[0];
     S.pal = p;
-    localStorage.setItem(LS.theme, id);
+    GStore.set(LS.theme, id);
     $$("#themes .sw").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.id === id)));
     graph.draw();
     if (S.stats) paintOverviewBars();
@@ -60,13 +60,13 @@
     // Auth is a real page (/login), not an overlay: an unauthenticated or
     // expired session bounces there and comes back to /app with the token set.
   function gate() {
-    localStorage.removeItem(LS.token);
-    location.replace("/login?next=/app");
+    GStore.del(LS.token);
+    location.replace("/login?next=/app&bounce=1");
   }
   function bindGate() {
     $("#btn-out").onclick = async () => {
       try { await api("/api/auth/logout", null, { method: "POST" }); } catch {}
-      localStorage.removeItem(LS.token); localStorage.removeItem(LS.ws);
+      GStore.del(LS.token); GStore.del(LS.ws);
       location.href = "/login";
     };
   }
@@ -90,7 +90,7 @@
     sel.value = active || "";
     sel.disabled = list.length < 2;
     sel.onchange = async () => {
-      S.ws = sel.value; localStorage.setItem(LS.ws, S.ws);
+      S.ws = sel.value; GStore.set(LS.ws, S.ws);
       sel.disabled = true;
       await enter();
     };
@@ -520,7 +520,7 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
           <span class="mt">${esc(w.graph)} · ${esc(w.role)}${w.graph_ready ? "" : " · graph missing"}</span></span>
           <span class="rt">${w.nodes != null ? `<span class="num">${nf.format(w.nodes)}</span><br><span class="mt">nodes</span>` : ""}</span></div>`).join("");
       $$("#acc-ws .item").forEach((it) => {
-        it.onclick = async () => { S.ws = it.dataset.ws; localStorage.setItem(LS.ws, S.ws); await enter(); show("account"); };
+        it.onclick = async () => { S.ws = it.dataset.ws; GStore.set(LS.ws, S.ws); await enter(); show("account"); };
       });
       loadKeys($("#acc-keys"));
     } catch (e) { $("#acc-user").innerHTML = `<p class="empty">${esc(e.message)}</p>`; }
@@ -634,7 +634,7 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
   let sse = null;
   function subscribeEvents() {
     if (sse) { sse.close(); sse = null; }
-    if (!localStorage.getItem(LS.token)) return;
+    if (!GStore.get(LS.token)) return;
     try { sse = new EventSource("/api/events", { withCredentials: true }); } catch { return; }
     sse.addEventListener("graph", async () => {
       toast("Graph rebuilt — refreshing");
@@ -683,7 +683,7 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
     const me = await api("/api/auth/me");
     S.me = me.user;
     if (!S.ws || !me.workspaces.some((w) => w.id === S.ws)) S.ws = me.active || (me.workspaces[0] || {}).id || null;
-    localStorage.setItem(LS.ws, S.ws || "");
+    GStore.set(LS.ws, S.ws || "");
     bindWorkspaceSwitcher(me.workspaces, S.ws);
     $("#verpill").textContent = (me.workspaces.find((w) => w.id === S.ws) || {}).slug || "workspace";
 
@@ -738,7 +738,7 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
     $("#nw-go").onclick = async () => {
       try {
         const r = await api("/api/workspaces", null, { method: "POST", body: { name: $("#nw-name").value, graph: $("#nw-graph").value } });
-        S.ws = r.workspace.id; localStorage.setItem(LS.ws, S.ws);
+        S.ws = r.workspace.id; GStore.set(LS.ws, S.ws);
         toast("Workspace created"); await enter(); show("account");
       } catch (e) { $("#nw-hint").innerHTML = `<span style="color:var(--danger)">${esc(e.message)}</span>`; }
     };
@@ -756,12 +756,12 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
       try {
         const r = await fetch("/api/workspaces/upload", {
           method: "POST",
-          headers: { Authorization: "Bearer " + localStorage.getItem(LS.token) },
+          headers: { Authorization: "Bearer " + GStore.get(LS.token) },
           body: fd,
         });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
-        S.ws = j.workspace.id; localStorage.setItem(LS.ws, S.ws);
+        S.ws = j.workspace.id; GStore.set(LS.ws, S.ws);
         $("#nw-hint").textContent = `Created ${j.workspace.slug} (${(j.bytes / 1048576).toFixed(1)} MB).`;
         $("#nw-file").value = ""; $("#nw-file-label").textContent = "Upload graph.json…";
         await enter(); show("account");
@@ -774,7 +774,7 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
     try {
       S.theme = await api("/api/theme");
       buildThemeSwitcher();
-      applyTheme(localStorage.getItem(LS.theme) || S.theme.default);
+      applyTheme(GStore.get(LS.theme) || S.theme.default);
     } catch (e) { return; }
 
     // Health tells the gate whether a demo account was seeded at boot.
@@ -783,8 +783,8 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
       $("#gate-foot").innerHTML = h.mcp ? "MCP endpoint live on <code>/mcp</code>" : "MCP extra not installed";
     } catch {}
 
-    S.ws = localStorage.getItem(LS.ws) || null;
-    if (!localStorage.getItem(LS.token)) return gate();
+    S.ws = GStore.get(LS.ws) || null;
+    if (!GStore.get(LS.token)) return gate();
     try { await enter(); } catch (e) { gate(); }
   }
   boot();
