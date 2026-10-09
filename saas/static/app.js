@@ -21,7 +21,13 @@
     if (params) Object.entries(params).forEach(([k, v]) => v != null && v !== "" && u.searchParams.set(k, v));
     const headers = Object.assign({}, opts.headers);
     const token = GStore.get(LS.token);
-    if (token) headers["Authorization"] = "Bearer " + token;
+    if (token) {
+      headers["Authorization"] = "Bearer " + token;
+      // Belt and braces: some embedded-preview proxies strip Authorization and
+      // the iframe blocks third-party cookies, so the query param is the one
+      // channel guaranteed to arrive. Server reads it only under /api/*.
+      u.searchParams.set("token", token);
+    }
     if (S.ws) headers["X-Workspace"] = S.ws;
     if (opts.body !== undefined) headers["Content-Type"] = "application/json";
     const r = await fetch(u, { method: opts.method || "GET", headers, body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined });
@@ -635,7 +641,10 @@ ${node.connections.slice(0, 14).map((c) => `  ${c.direction === "out" ? "-->" : 
   function subscribeEvents() {
     if (sse) { sse.close(); sse = null; }
     if (!GStore.get(LS.token)) return;
-    try { sse = new EventSource("/api/events", { withCredentials: true }); } catch { return; }
+    const tok = GStore.get(LS.token);
+    try {
+      sse = new EventSource("/api/events?token=" + encodeURIComponent(tok || ""), { withCredentials: true });
+    } catch { return; }
     sse.addEventListener("graph", async () => {
       toast("Graph rebuilt — refreshing");
       try {

@@ -13,6 +13,18 @@
 window.GStore = (() => {
   "use strict";
   const mem = {};
+
+  // A token handed over by the login page as #token=... (fragments never reach
+  // the server, so this is safe in transit). Adopted once, at boot, into
+  // whichever tier actually works in this context, then erased from the URL.
+  let bootToken = null;
+  try {
+    const fm = window.location.hash.match(/[#&]token=([^&]+)/);
+    if (fm) {
+      bootToken = decodeURIComponent(fm[1]);
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  } catch { /* ignore */ }
   let mode = "memory";
   try {
     const probe = "__gf_probe__";
@@ -35,7 +47,7 @@ window.GStore = (() => {
   const cDel = (k) => {
     document.cookie = `${k}=; path=/; max-age=0; SameSite=None; Secure`;
   };
-  return {
+  const store = {
     mode,
     get(k) {
       if (mode === "local") { try { return window.localStorage.getItem(k); } catch { /* fall through */ } }
@@ -53,4 +65,6 @@ window.GStore = (() => {
       delete mem[k];
     },
   };
+  if (bootToken) store.set("graphify.token", bootToken);
+  return store;
 })();

@@ -150,7 +150,8 @@
           const first = (d.workspaces || [])[0];
           if (first) GStore.set(LS_WS, first.id);
           const next = new URLSearchParams(location.search).get("next");
-          location.href = next && next.startsWith("/") && !next.startsWith("//") ? next : "/app";
+          const base = next && next.startsWith("/") && !next.startsWith("//") ? next : "/app";
+          location.href = base + "#token=" + encodeURIComponent(d.token);
         } catch (ex) {
           $("#au-err").textContent = ex.message;
           b.disabled = false; b.textContent = "Enter with the demo account";
@@ -179,7 +180,8 @@
         const first = (d.workspaces || [])[0];
         if (first) GStore.set(LS_WS, first.id); else GStore.del(LS_WS);
         const next = new URLSearchParams(location.search).get("next");
-        location.href = next && next.startsWith("/") && !next.startsWith("//") ? next : "/app";
+        const base = next && next.startsWith("/") && !next.startsWith("//") ? next : "/app";
+        location.href = base + "#token=" + encodeURIComponent(d.token);
       } catch (ex) {
         err.textContent = ex.message;
         btn.textContent = label; btn.disabled = false;

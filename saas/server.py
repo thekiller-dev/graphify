@@ -20,8 +20,10 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import json
 import os
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -141,7 +143,8 @@ class RevalidateMiddleware:
     index.html moves on, and the page renders half-styled.
     """
 
-    REVALIDATE = ("/static/", "/theme.css", "/fonts.css")
+    REVALIDATE_PREFIXES = ("/static/",)
+    REVALIDATE_EXACT = frozenset({"/", "/login", "/signup", "/app", "/invite", "/theme.css", "/fonts.css"})
 
     def __init__(self, app):
         self.app = app
@@ -151,7 +154,7 @@ class RevalidateMiddleware:
             await self.app(scope, receive, send)
             return
         path = scope.get("path", "")
-        if not path.startswith(self.REVALIDATE):
+        if not (path.startswith(self.REVALIDATE_PREFIXES) or path in self.REVALIDATE_EXACT):
             await self.app(scope, receive, send)
             return
 
@@ -193,11 +196,14 @@ def _bearer(request: Request) -> str | None:
 def principal(request: Request) -> Principal:
     """Resolve credentials → user + workspace. Never raises; callers decide."""
     a: Auth = get_auth()
-    # ?token= exists for EventSource, which cannot set an Authorization header.
-    # It is only honoured on the SSE route (see api_events) to keep tokens out
-    # of ordinary URLs and proxy logs.
     token = _bearer(request) or request.cookies.get(SESSION_COOKIE)
-    if token is None and request.url.path == "/api/events":
+    if token is None and request.url.path.startswith("/api/"):
+        # Last-resort channel. Embedded previews have been observed stripping
+        # the Authorization header at the proxy and blocking third-party
+        # cookies in the iframe, which left a freshly-issued token with no way
+        # to travel. A query parameter survives both. It is read only under
+        # /api/*, never logged (AccessLogMiddleware logs paths without query
+        # strings), and the header/cookie remain preferred everywhere else.
         token = request.query_params.get("token") or None
     wanted = request.headers.get("x-workspace") or request.query_params.get("ws")
     if token and token.startswith("gf_"):
@@ -230,11 +236,16 @@ def principal(request: Request) -> Principal:
     return Principal(user, workspaces[0], "session")
 
 
+# Endpoints that need a signed-in user but not a workspace — otherwise a
+# brand-new account could never create its first workspace (403 chicken-and-egg).
+_NO_WORKSPACE_NEEDED = frozenset({"/api/auth/me", "/api/workspaces"})
+
+
 def require(request: Request, *, meter: bool = True) -> Principal:
     p = principal(request)
     if p.via == "none":
         raise AuthError("authentication required", 401)
-    if p.workspace is None and request.url.path != "/api/auth/me":
+    if p.workspace is None and request.url.path not in _NO_WORKSPACE_NEEDED:
         raise AuthError("no workspace: create one first", 403)
     if p.workspace is not None:
         # The plan gate sits in one place so no new endpoint can forget it:
@@ -311,16 +322,44 @@ def _guard(fn):
 # ------------------------------------------------------------------- public
 
 
+_ASSET_URL_RE = re.compile(r'((?:src|href)="/static/[^"?]+)"')
+_asset_versions: dict[str, tuple[float, str]] = {}
+
+
+def _asset_version(rel: str) -> str:
+    """Content-hash cache-buster for one /static/ file, memoized by mtime."""
+    path = STATIC_DIR / rel
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return "0"
+    hit = _asset_versions.get(rel)
+    if hit is not None and hit[0] == mtime:
+        return hit[1]
+    version = hashlib.sha1(path.read_bytes()).hexdigest()[:10]
+    _asset_versions[rel] = (mtime, version)
+    return version
+
+
 def _page(name: str) -> Response:
-    """Render a static page, injecting the server-side default theme.
+    """Render a static page, injecting the default theme and asset versions.
 
     Pages are re-read per request (they are tiny) so a deploy never serves a
-    stale shell; ``Cache-Control: no-cache`` on /static (see
-    :class:`RevalidateMiddleware`) keeps browsers and proxies from pinning an
-    old app.css against a new index.html — the drift that made the login gate
-    render unstyled once the CSS changed under a cached copy.
+    stale shell, and the shell itself is ``no-cache`` (see
+    :class:`RevalidateMiddleware`). Every /static/ reference additionally gets
+    ``?v=<content hash>``: users inside a preview iframe cannot hard-reload,
+    and heuristic caching once pinned an old app.js/site.js against the new
+    HTML — the stale script then authenticated without ``?token=`` and the
+    workspace bounced back to /login. Fresh HTML now always pulls fresh JS.
     """
     html = (STATIC_DIR / name).read_text(encoding="utf-8")
+    html = _ASSET_URL_RE.sub(
+        lambda m: m.group(1)
+        + "?v="
+        + _asset_version(m.group(1).split("/static/", 1)[1])
+        + '"',
+        html,
+    )
     return HTMLResponse(html.replace("__THEME__", themes.DEFAULT_THEME))
 
 
@@ -462,7 +501,7 @@ async def api_me(request: Request) -> JSONResponse:
     }
     if p.workspace is not None:
         out["workspace"] = _ws_json(p.workspace, p.store)
-    return out
+    return JSONResponse(out)
 
 
 def _set_cookie(resp: Response, token: str) -> None:
